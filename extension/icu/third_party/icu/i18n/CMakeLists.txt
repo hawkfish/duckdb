@@ -44,6 +44,7 @@ add_library_unity(
   decContext.cpp
   decNumber.cpp
   decimfmt.cpp
+  displayoptions.cpp
   double-conversion-bignum-dtoa.cpp
   double-conversion-bignum.cpp
   double-conversion-cached-powers.cpp
@@ -76,12 +77,12 @@ add_library_unity(
   listformatter.cpp
   measfmt.cpp
   measunit.cpp
+  measunit_extra.cpp
   measure.cpp
   msgfmt.cpp
   nfrs.cpp
   nfrule.cpp
   nfsubs.cpp
-  nounit.cpp
   number_affixutils.cpp
   number_asformat.cpp
   number_capi.cpp
@@ -105,6 +106,8 @@ add_library_unity(
   number_rounding.cpp
   number_scientific.cpp
   number_skeletons.cpp
+  number_symbolswrapper.cpp
+  number_usageprefs.cpp
   number_utils.cpp
   numfmt.cpp
   numparse_affixes.cpp
@@ -116,12 +119,14 @@ add_library_unity(
   numparse_scientific.cpp
   numparse_symbols.cpp
   numparse_validators.cpp
+  numrange_capi.cpp
   numrange_fluent.cpp
   numrange_impl.cpp
   numsys.cpp
   olsontz.cpp
   persncal.cpp
   plurfmt.cpp
+  pluralranges.cpp
   plurrule.cpp
   quantityformatter.cpp
   rbnf.cpp
@@ -166,6 +171,10 @@ add_library_unity(
   ulistformatter.cpp
   ulocdata.cpp
   umsg.cpp
+  units_complexconverter.cpp
+  units_converter.cpp
+  units_data.cpp
+  units_router.cpp
   unum.cpp
   unumsys.cpp
   upluralrules.cpp

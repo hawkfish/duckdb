@@ -237,6 +237,13 @@ const int32_t up_SCRIPT_PROPS[] = {
     0x1190C | up_EXCLUSION,  // Diak
     0x18C65 | up_EXCLUSION | up_LB_LETTERS,  // Kits
     0x10E88 | up_EXCLUSION | up_RTL,  // Yezi
+    0x12FE5 | up_EXCLUSION,  // Cpmn
+    0x10F7C | up_EXCLUSION | up_RTL,  // Ougr
+    0x16ABC | up_EXCLUSION,  // Tnsa
+    0x1E290 | up_EXCLUSION,  // Toto
+    0x10582 | up_EXCLUSION | up_CASED,  // Vith
+    0x11F1B | up_EXCLUSION | up_LB_LETTERS,  // Kawi
+    0x1E4E6 | up_EXCLUSION,  // Nagm
     // End copy-paste from parsescriptmetadata.py
 };
 

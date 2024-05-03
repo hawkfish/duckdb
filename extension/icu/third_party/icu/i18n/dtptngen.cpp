@@ -100,7 +100,7 @@ static void ures_a_open(UResourceBundleAIterator *aiter, UResourceBundle *bund, 
         aiter->entries[i].key = (UChar*)uprv_malloc(len*sizeof(UChar));
         u_charsToUChars(akey, aiter->entries[i].key, len);
     }
-    uprv_sortArray(aiter->entries, aiter->num, sizeof(UResAEntry), ures_a_codepointSort, nullptr, TRUE, status);
+    uprv_sortArray(aiter->entries, aiter->num, sizeof(UResAEntry), ures_a_codepointSort, nullptr, true, status);
 #endif
 }
 
@@ -273,8 +273,6 @@ static const char* const CLDR_FIELD_WIDTH[] = { // [UDATPG_WIDTH_COUNT]
     "", "-short", "-narrow"
 };
 
-// TODO(ticket:13619): remove when definition uncommented in dtptngen.h.
-static const int32_t UDATPG_WIDTH_COUNT = UDATPG_NARROW + 1;
 static constexpr UDateTimePGDisplayWidth UDATPG_WIDTH_APPENDITEM = UDATPG_WIDE;
 static constexpr int32_t UDATPG_FIELD_KEY_MAX = 24; // max length of CLDR field tag (type + width)
 
@@ -285,6 +283,7 @@ static const UChar UDATPG_ItemFormat[]= {0x7B, 0x30, 0x7D, 0x20, 0x251C, 0x7B, 0
 //static const UChar repeatedPatterns[6]={dtptngen_CAP_G, dtptngen_CAP_E, dtptngen_LOW_Z, dtptngen_LOW_V, dtptngen_CAP_Q, 0}; // "GEzvQ"
 
 static const char DT_DateTimePatternsTag[]="DateTimePatterns";
+static const char DT_DateAtTimePatternsTag[]="DateTimePatterns%atTime";
 static const char DT_DateTimeCalendarTag[]="calendar";
 static const char DT_DateTimeGregorianTag[]="gregorian";
 static const char DT_DateTimeAppendItemsTag[]="appendItems";
@@ -311,6 +310,16 @@ DateTimePatternGenerator::createInstance(const Locale& locale, UErrorCode& statu
     return U_SUCCESS(status) ? result.orphan() : nullptr;
 }
 
+DateTimePatternGenerator* U_EXPORT2
+DateTimePatternGenerator::createInstanceNoStdPat(const Locale& locale, UErrorCode& status) {
+    if (U_FAILURE(status)) {
+        return nullptr;
+    }
+    LocalPointer<DateTimePatternGenerator> result(
+            new DateTimePatternGenerator(locale, status, true), status);
+    return U_SUCCESS(status) ? result.orphan() : nullptr;
+}
+
 DateTimePatternGenerator*  U_EXPORT2
 DateTimePatternGenerator::createEmptyInstance(UErrorCode& status) {
     if (U_FAILURE(status)) {
@@ -324,6 +333,7 @@ DateTimePatternGenerator::createEmptyInstance(UErrorCode& status) {
 DateTimePatternGenerator::DateTimePatternGenerator(UErrorCode &status) :
     skipMatcher(nullptr),
     fAvailableFormatKeyHash(nullptr),
+    fDefaultHourFormatChar(0),
     internalErrorCode(U_ZERO_ERROR)
 {
     fp = new FormatParser();
@@ -335,9 +345,10 @@ DateTimePatternGenerator::DateTimePatternGenerator(UErrorCode &status) :
     }
 }
 
-DateTimePatternGenerator::DateTimePatternGenerator(const Locale& locale, UErrorCode &status) :
+DateTimePatternGenerator::DateTimePatternGenerator(const Locale& locale, UErrorCode &status, UBool skipStdPatterns) :
     skipMatcher(nullptr),
     fAvailableFormatKeyHash(nullptr),
+    fDefaultHourFormatChar(0),
     internalErrorCode(U_ZERO_ERROR)
 {
     fp = new FormatParser();
@@ -348,7 +359,7 @@ DateTimePatternGenerator::DateTimePatternGenerator(const Locale& locale, UErrorC
         internalErrorCode = status = U_MEMORY_ALLOCATION_ERROR;
     }
     else {
-        initData(locale, status);
+        initData(locale, status, skipStdPatterns);
     }
 }
 
@@ -356,6 +367,7 @@ DateTimePatternGenerator::DateTimePatternGenerator(const DateTimePatternGenerato
     UObject(),
     skipMatcher(nullptr),
     fAvailableFormatKeyHash(nullptr),
+    fDefaultHourFormatChar(0),
     internalErrorCode(U_ZERO_ERROR)
 {
     fp = new FormatParser();
@@ -380,10 +392,13 @@ DateTimePatternGenerator::operator=(const DateTimePatternGenerator& other) {
     *fp = *(other.fp);
     dtMatcher->copyFrom(other.dtMatcher->skeleton);
     *distanceInfo = *(other.distanceInfo);
-    dateTimeFormat = other.dateTimeFormat;
+    for (int32_t style = UDAT_FULL; style <= UDAT_SHORT; style++) {
+        dateTimeFormat[style] = other.dateTimeFormat[style];
+    }
     decimal = other.decimal;
-    // NUL-terminate for the C API.
-    dateTimeFormat.getTerminatedBuffer();
+    for (int32_t style = UDAT_FULL; style <= UDAT_SHORT; style++) {
+        dateTimeFormat[style].getTerminatedBuffer(); // NUL-terminate for the C API.
+    }
     decimal.getTerminatedBuffer();
     delete skipMatcher;
     if ( other.skipMatcher == nullptr ) {
@@ -411,31 +426,36 @@ DateTimePatternGenerator::operator=(const DateTimePatternGenerator& other) {
 }
 
 
-UBool
+bool
 DateTimePatternGenerator::operator==(const DateTimePatternGenerator& other) const {
     if (this == &other) {
-        return TRUE;
+        return true;
     }
     if ((pLocale==other.pLocale) && (patternMap->equals(*other.patternMap)) &&
-        (dateTimeFormat==other.dateTimeFormat) && (decimal==other.decimal)) {
+        (decimal==other.decimal)) {
+        for (int32_t style = UDAT_FULL; style <= UDAT_SHORT; style++) {
+            if (dateTimeFormat[style] != other.dateTimeFormat[style]) {
+                return false;
+            }
+        }
         for ( int32_t i=0 ; i<UDATPG_FIELD_COUNT; ++i ) {
             if (appendItemFormats[i] != other.appendItemFormats[i]) {
-                return FALSE;
+                return false;
             }
             for (int32_t j=0; j< UDATPG_WIDTH_COUNT; ++j ) {
                 if (fieldDisplayNames[i][j] != other.fieldDisplayNames[i][j]) {
-                    return FALSE;
+                    return false;
                 }
             }
         }
-        return TRUE;
+        return true;
     }
     else {
-        return FALSE;
+        return false;
     }
 }
 
-UBool
+bool
 DateTimePatternGenerator::operator!=(const DateTimePatternGenerator& other) const {
     return  !operator==(other);
 }
@@ -454,7 +474,7 @@ DateTimePatternGenerator::~DateTimePatternGenerator() {
 
 namespace {
 
-UInitOnce dtptngen_initOnce = U_INITONCE_INITIALIZER;
+UInitOnce dtptngen_initOnce {};
 UHashtable *localeToAllowedHourFormatsMap = nullptr;
 
 // Value deleter for hashmap.
@@ -465,7 +485,7 @@ U_CFUNC void U_CALLCONV deleteAllowedHourFormats(void *ptr) {
 // Close hashmap at cleanup.
 U_CFUNC UBool U_CALLCONV allowedHourFormatsCleanup() {
     uhash_close(localeToAllowedHourFormatsMap);
-    return TRUE;
+    return true;
 }
 
 enum AllowedHourFormat{
@@ -486,13 +506,15 @@ enum AllowedHourFormat{
 }  // namespace
 
 void
-DateTimePatternGenerator::initData(const Locale& locale, UErrorCode &status) {
+DateTimePatternGenerator::initData(const Locale& locale, UErrorCode &status, UBool skipStdPatterns) {
     //const char *baseLangName = locale.getBaseName(); // unused
 
     skipMatcher = nullptr;
     fAvailableFormatKeyHash=nullptr;
     addCanonicalItems(status);
-    addICUPatterns(locale, status);
+    if (!skipStdPatterns) { // skip to prevent circular dependency when called from SimpleDateFormat::construct
+        addICUPatterns(locale, status);
+    }
     addCLDRData(locale, status);
     setDateTimeFromCalendar(locale, status);
     setDecimalSymbols(locale, status);
@@ -510,7 +532,7 @@ struct AllowedHourFormatsSink : public ResourceSink {
     virtual ~AllowedHourFormatsSink();
 
     virtual void put(const char *key, ResourceValue &value, UBool /*noFallback*/,
-                     UErrorCode &errorCode) {
+                     UErrorCode &errorCode) override {
         ResourceTable timeData = value.getTable(errorCode);
         if (U_FAILURE(errorCode)) { return; }
         for (int32_t i = 0; timeData.getKeyAndValue(i, key, value); ++i) {
@@ -634,6 +656,17 @@ void DateTimePatternGenerator::getAllowedHourFormats(const Locale &locale, UErro
 
     const char *language = locale.getLanguage();
     const char *country = locale.getCountry();
+
+    char regionOverride[8];
+    int32_t regionOverrideLength = locale.getKeywordValue("rg", regionOverride, sizeof(regionOverride), status);
+    if (U_SUCCESS(status) && regionOverrideLength > 0) {
+        country = regionOverride;
+        if (regionOverrideLength > 2) {
+            // chop off any subdivision codes that may have been included
+            regionOverride[2] = '\0';
+        }
+    }
+
     Locale maxLocale;  // must be here for correct lifetime
     if (*language == '\0' || *country == '\0') {
         maxLocale = locale;
@@ -654,6 +687,23 @@ void DateTimePatternGenerator::getAllowedHourFormats(const Locale &locale, UErro
 
     int32_t* allowedFormats = getAllowedHourFormatsLangCountry(language, country, status);
 
+    // We need to check if there is an hour cycle on locale
+    char buffer[8];
+    int32_t count = locale.getKeywordValue("hours", buffer, sizeof(buffer), status);
+
+    fDefaultHourFormatChar = 0;
+    if (U_SUCCESS(status) && count > 0) {
+        if(uprv_strcmp(buffer, "h24") == 0) {
+            fDefaultHourFormatChar = dtptngen_LOW_K;
+        } else if(uprv_strcmp(buffer, "h23") == 0) {
+            fDefaultHourFormatChar = dtptngen_CAP_H;
+        } else if(uprv_strcmp(buffer, "h12") == 0) {
+            fDefaultHourFormatChar = dtptngen_LOW_H;
+        } else if(uprv_strcmp(buffer, "h11") == 0) {
+            fDefaultHourFormatChar = dtptngen_CAP_K;
+        }
+    }
+
     // Check if the region has an alias
     if (allowedFormats == nullptr) {
         UErrorCode localStatus = U_ZERO_ERROR;
@@ -667,13 +717,16 @@ void DateTimePatternGenerator::getAllowedHourFormats(const Locale &locale, UErro
     if (allowedFormats != nullptr) {  // Lookup is successful
         // Here allowedFormats points to a list consisting of key for preferredFormat,
         // followed by one or more keys for allowedFormats, then followed by ALLOWED_HOUR_FORMAT_UNKNOWN.
-        switch (allowedFormats[0]) {
-            case ALLOWED_HOUR_FORMAT_h: fDefaultHourFormatChar = dtptngen_LOW_H; break;
-            case ALLOWED_HOUR_FORMAT_H: fDefaultHourFormatChar = dtptngen_CAP_H; break;
-            case ALLOWED_HOUR_FORMAT_K: fDefaultHourFormatChar = dtptngen_CAP_K; break;
-            case ALLOWED_HOUR_FORMAT_k: fDefaultHourFormatChar = dtptngen_LOW_K; break;
-            default: fDefaultHourFormatChar = dtptngen_CAP_H; break;
+        if (!fDefaultHourFormatChar) {
+            switch (allowedFormats[0]) {
+                case ALLOWED_HOUR_FORMAT_h: fDefaultHourFormatChar = dtptngen_LOW_H; break;
+                case ALLOWED_HOUR_FORMAT_H: fDefaultHourFormatChar = dtptngen_CAP_H; break;
+                case ALLOWED_HOUR_FORMAT_K: fDefaultHourFormatChar = dtptngen_CAP_K; break;
+                case ALLOWED_HOUR_FORMAT_k: fDefaultHourFormatChar = dtptngen_LOW_K; break;
+                default: fDefaultHourFormatChar = dtptngen_CAP_H; break;
+            }
         }
+
         for (int32_t i = 0; i < UPRV_LENGTHOF(fAllowedHourFormats); ++i) {
             fAllowedHourFormats[i] = allowedFormats[i + 1];
             if (fAllowedHourFormats[i] == ALLOWED_HOUR_FORMAT_UNKNOWN) {
@@ -681,9 +734,36 @@ void DateTimePatternGenerator::getAllowedHourFormats(const Locale &locale, UErro
             }
         }
     } else {  // Lookup failed, twice
-        fDefaultHourFormatChar = dtptngen_CAP_H;
+        if (!fDefaultHourFormatChar) {
+            fDefaultHourFormatChar = dtptngen_CAP_H;
+        }
         fAllowedHourFormats[0] = ALLOWED_HOUR_FORMAT_H;
         fAllowedHourFormats[1] = ALLOWED_HOUR_FORMAT_UNKNOWN;
+    }
+}
+
+UDateFormatHourCycle
+DateTimePatternGenerator::getDefaultHourCycle(UErrorCode& status) const {
+    if (U_FAILURE(status)) {
+        return UDAT_HOUR_CYCLE_23;
+    }
+    if (fDefaultHourFormatChar == 0) {
+        // We need to return something, but the caller should ignore it
+        // anyways since the returned status is a failure.
+        status = U_UNSUPPORTED_ERROR;
+        return UDAT_HOUR_CYCLE_23;
+    }
+    switch (fDefaultHourFormatChar) {
+        case dtptngen_CAP_K:
+            return UDAT_HOUR_CYCLE_11;
+        case dtptngen_LOW_H:
+            return UDAT_HOUR_CYCLE_12;
+        case dtptngen_CAP_H:
+            return UDAT_HOUR_CYCLE_23;
+        case dtptngen_LOW_K:
+            return UDAT_HOUR_CYCLE_24;
+        default:
+            UPRV_UNREACHABLE_EXIT;
     }
 }
 
@@ -740,7 +820,7 @@ DateTimePatternGenerator::addICUPatterns(const Locale& locale, UErrorCode& statu
         SimpleDateFormat* sdf;
         if (df != nullptr && (sdf = dynamic_cast<SimpleDateFormat*>(df)) != nullptr) {
             sdf->toPattern(dfPattern);
-            addPattern(dfPattern, FALSE, conflictingString, status);
+            addPattern(dfPattern, false, conflictingString, status);
         }
         // TODO Maybe we should return an error when the date format isn't simple.
         delete df;
@@ -749,7 +829,7 @@ DateTimePatternGenerator::addICUPatterns(const Locale& locale, UErrorCode& statu
         df = DateFormat::createTimeInstance(style, locale);
         if (df != nullptr && (sdf = dynamic_cast<SimpleDateFormat*>(df)) != nullptr) {
             sdf->toPattern(dfPattern);
-            addPattern(dfPattern, FALSE, conflictingString, status);
+            addPattern(dfPattern, false, conflictingString, status);
 
             // TODO: C++ and Java are inconsistent (see #12568).
             // C++ uses MEDIUM, but Java uses SHORT.
@@ -769,7 +849,7 @@ DateTimePatternGenerator::hackTimes(const UnicodeString& hackPattern, UErrorCode
 
     fp->set(hackPattern);
     UnicodeString mmss;
-    UBool gotMm=FALSE;
+    UBool gotMm=false;
     for (int32_t i=0; i<fp->itemNumber; ++i) {
         UnicodeString field = fp->items[i];
         if ( fp->isQuoteLiteral(field) ) {
@@ -786,7 +866,7 @@ DateTimePatternGenerator::hackTimes(const UnicodeString& hackPattern, UErrorCode
             else {
                 UChar ch=field.charAt(0);
                 if (ch==dtptngen_LOW_M) {
-                    gotMm=TRUE;
+                    gotMm=true;
                     mmss+=field;
                 }
                 else {
@@ -795,7 +875,7 @@ DateTimePatternGenerator::hackTimes(const UnicodeString& hackPattern, UErrorCode
                             break;
                         }
                         mmss+= field;
-                        addPattern(mmss, FALSE, conflictingString, status);
+                        addPattern(mmss, false, conflictingString, status);
                         break;
                     }
                     else {
@@ -826,7 +906,7 @@ DateTimePatternGenerator::getCalendarTypeToUse(const Locale& locale, CharString&
             "calendar",
             locale.getName(),
             nullptr,
-            FALSE,
+            false,
             &localStatus);
         localeWithCalendarKey[ULOC_LOCALE_IDENTIFIER_CAPACITY-1] = 0; // ensure null termination
         // now get the calendar key value from that locale
@@ -843,7 +923,7 @@ DateTimePatternGenerator::getCalendarTypeToUse(const Locale& locale, CharString&
             err = localStatus;
             return;
         }
-        if (calendarTypeLen < ULOC_KEYWORDS_CAPACITY) {
+        if (calendarTypeLen > 0 && calendarTypeLen < ULOC_KEYWORDS_CAPACITY) {
             destination.clear().append(calendarType, -1, err);
             if (U_FAILURE(err)) { return; }
         }
@@ -871,21 +951,17 @@ struct DateTimePatternGenerator::AppendItemFormatsSink : public ResourceSink {
     virtual ~AppendItemFormatsSink();
 
     virtual void put(const char *key, ResourceValue &value, UBool /*noFallback*/,
-            UErrorCode &errorCode) {
-        ResourceTable itemsTable = value.getTable(errorCode);
-        if (U_FAILURE(errorCode)) { return; }
-        for (int32_t i = 0; itemsTable.getKeyAndValue(i, key, value); ++i) {
-            UDateTimePatternField field = dtpg.getAppendFormatNumber(key);
-            if (field == UDATPG_FIELD_COUNT) { continue; }
-            const UnicodeString& valueStr = value.getUnicodeString(errorCode);
-            if (dtpg.getAppendItemFormat(field).isEmpty() && !valueStr.isEmpty()) {
-                dtpg.setAppendItemFormat(field, valueStr);
-            }
+            UErrorCode &errorCode) override {
+        UDateTimePatternField field = dtpg.getAppendFormatNumber(key);
+        if (field == UDATPG_FIELD_COUNT) { return; }
+        const UnicodeString& valueStr = value.getUnicodeString(errorCode);
+        if (dtpg.getAppendItemFormat(field).isEmpty() && !valueStr.isEmpty()) {
+            dtpg.setAppendItemFormat(field, valueStr);
         }
     }
 
     void fillInMissing() {
-        UnicodeString defaultItemFormat(TRUE, UDATPG_ItemFormat, UPRV_LENGTHOF(UDATPG_ItemFormat)-1);  // Read-only alias.
+        UnicodeString defaultItemFormat(true, UDATPG_ItemFormat, UPRV_LENGTHOF(UDATPG_ItemFormat)-1);  // Read-only alias.
         for (int32_t i = 0; i < UDATPG_FIELD_COUNT; i++) {
             UDateTimePatternField field = (UDateTimePatternField)i;
             if (dtpg.getAppendItemFormat(field).isEmpty()) {
@@ -904,23 +980,16 @@ struct DateTimePatternGenerator::AppendItemNamesSink : public ResourceSink {
     virtual ~AppendItemNamesSink();
 
     virtual void put(const char *key, ResourceValue &value, UBool /*noFallback*/,
-            UErrorCode &errorCode) {
-        ResourceTable itemsTable = value.getTable(errorCode);
+            UErrorCode &errorCode) override {
+        UDateTimePGDisplayWidth width;
+        UDateTimePatternField field = dtpg.getFieldAndWidthIndices(key, &width);
+        if (field == UDATPG_FIELD_COUNT) { return; }
+        ResourceTable detailsTable = value.getTable(errorCode);
         if (U_FAILURE(errorCode)) { return; }
-        for (int32_t i = 0; itemsTable.getKeyAndValue(i, key, value); ++i) {
-            UDateTimePGDisplayWidth width;
-            UDateTimePatternField field = dtpg.getFieldAndWidthIndices(key, &width);
-            if (field == UDATPG_FIELD_COUNT) { continue; }
-            ResourceTable detailsTable = value.getTable(errorCode);
-            if (U_FAILURE(errorCode)) { return; }
-            for (int32_t j = 0; detailsTable.getKeyAndValue(j, key, value); ++j) {
-                if (uprv_strcmp(key, "dn") != 0) { continue; }
-                const UnicodeString& valueStr = value.getUnicodeString(errorCode);
-                if (dtpg.getFieldDisplayName(field,width).isEmpty() && !valueStr.isEmpty()) {
-                    dtpg.setFieldDisplayName(field,width,valueStr);
-                }
-                break;
-            }
+        if (!detailsTable.findValue("dn", value)) { return; }
+        const UnicodeString& valueStr = value.getUnicodeString(errorCode);
+        if (U_SUCCESS(errorCode) && dtpg.getFieldDisplayName(field,width).isEmpty() && !valueStr.isEmpty()) {
+            dtpg.setFieldDisplayName(field,width,valueStr);
         }
     }
 
@@ -963,19 +1032,15 @@ struct DateTimePatternGenerator::AvailableFormatsSink : public ResourceSink {
     virtual ~AvailableFormatsSink();
 
     virtual void put(const char *key, ResourceValue &value, UBool isRoot,
-            UErrorCode &errorCode) {
-        ResourceTable itemsTable = value.getTable(errorCode);
-        if (U_FAILURE(errorCode)) { return; }
-        for (int32_t i = 0; itemsTable.getKeyAndValue(i, key, value); ++i) {
-            const UnicodeString formatKey(key, -1, US_INV);
-            if (!dtpg.isAvailableFormatSet(formatKey) ) {
-                dtpg.setAvailableFormat(formatKey, errorCode);
-                // Add pattern with its associated skeleton. Override any duplicate
-                // derived from std patterns, but not a previous availableFormats entry:
-                const UnicodeString& formatValue = value.getUnicodeString(errorCode);
-                conflictingPattern.remove();
-                dtpg.addPatternWithSkeleton(formatValue, &formatKey, !isRoot, conflictingPattern, errorCode);
-            }
+            UErrorCode &errorCode) override {
+        const UnicodeString formatKey(key, -1, US_INV);
+        if (!dtpg.isAvailableFormatSet(formatKey) ) {
+            dtpg.setAvailableFormat(formatKey, errorCode);
+            // Add pattern with its associated skeleton. Override any duplicate
+            // derived from std patterns, but not a previous availableFormats entry:
+            const UnicodeString& formatValue = value.getUnicodeString(errorCode);
+            conflictingPattern.remove();
+            dtpg.addPatternWithSkeleton(formatValue, &formatKey, !isRoot, conflictingPattern, errorCode);
         }
     }
 };
@@ -1010,13 +1075,13 @@ DateTimePatternGenerator::addCLDRData(const Locale& locale, UErrorCode& errorCod
         .append('/', errorCode)
         .append(DT_DateTimeAppendItemsTag, errorCode); // i.e., calendar/xxx/appendItems
     if (U_FAILURE(errorCode)) { return; }
-    ures_getAllItemsWithFallback(rb.getAlias(), path.data(), appendItemFormatsSink, err);
+    ures_getAllChildrenWithFallback(rb.getAlias(), path.data(), appendItemFormatsSink, err);
     appendItemFormatsSink.fillInMissing();
 
     // Load CLDR item names.
     err = U_ZERO_ERROR;
     AppendItemNamesSink appendItemNamesSink(*this);
-    ures_getAllItemsWithFallback(rb.getAlias(), DT_DateTimeFieldsTag, appendItemNamesSink, err);
+    ures_getAllChildrenWithFallback(rb.getAlias(), DT_DateTimeFieldsTag, appendItemNamesSink, err);
     appendItemNamesSink.fillInMissing();
 
     // Load the available formats from CLDR.
@@ -1031,7 +1096,7 @@ DateTimePatternGenerator::addCLDRData(const Locale& locale, UErrorCode& errorCod
         .append('/', errorCode)
         .append(DT_DateTimeAvailableFormatsTag, errorCode); // i.e., calendar/xxx/availableFormats
     if (U_FAILURE(errorCode)) { return; }
-    ures_getAllItemsWithFallback(rb.getAlias(), path.data(), availableFormatsSink, err);
+    ures_getAllChildrenWithFallback(rb.getAlias(), path.data(), availableFormatsSink, err);
 }
 
 void
@@ -1040,7 +1105,7 @@ DateTimePatternGenerator::initHashtable(UErrorCode& err) {
     if (fAvailableFormatKeyHash!=nullptr) {
         return;
     }
-    LocalPointer<Hashtable> hash(new Hashtable(FALSE, err), err);
+    LocalPointer<Hashtable> hash(new Hashtable(false, err), err);
     if (U_SUCCESS(err)) {
         fAvailableFormatKeyHash = hash.orphan();
     }
@@ -1152,7 +1217,21 @@ DateTimePatternGenerator::getBestPattern(const UnicodeString& patternForm, UDate
     }
     resultPattern.remove();
     status = U_ZERO_ERROR;
-    dtFormat=getDateTimeFormat();
+    // determine which dateTimeFormat to use
+    PtnSkeleton* reqSkeleton = dtMatcher->getSkeletonPtr();
+    UDateFormatStyle style = UDAT_SHORT;
+    int32_t monthFieldLen = reqSkeleton->baseOriginal.getFieldLength(UDATPG_MONTH_FIELD);
+    if (monthFieldLen == 4) {
+        if (reqSkeleton->baseOriginal.getFieldLength(UDATPG_WEEKDAY_FIELD) > 0) {
+            style = UDAT_FULL;
+        } else {
+            style = UDAT_LONG;
+        }
+    } else if (monthFieldLen == 3) {
+        style = UDAT_MEDIUM;
+    }
+    // and now use it to compose date and time
+    dtFormat=getDateTimeFormat(style, status);
     SimpleFormatter(dtFormat, 2, 2, status).format(timePattern, datePattern, resultPattern, status);
     return resultPattern;
 }
@@ -1168,7 +1247,7 @@ UnicodeString
 DateTimePatternGenerator::mapSkeletonMetacharacters(const UnicodeString& patternForm, int32_t* flags, UErrorCode& status) {
     UnicodeString patternFormMapped;
     patternFormMapped.remove();
-    UBool inQuoted = FALSE;
+    UBool inQuoted = false;
     int32_t patPos, patLen = patternForm.length();
     for (patPos = 0; patPos < patLen; patPos++) {
         UChar patChr = patternForm.charAt(patPos);
@@ -1280,7 +1359,7 @@ DateTimePatternGenerator::addCanonicalItems(UErrorCode& status) {
 
     for (int32_t i=0; i<UDATPG_FIELD_COUNT; i++) {
         if (Canonical_Items[i] > 0) {
-            addPattern(UnicodeString(Canonical_Items[i]), FALSE, conflictingPattern, status);
+            addPattern(UnicodeString(Canonical_Items[i]), false, conflictingPattern, status);
         }
         if (U_FAILURE(status)) { return; }
     }
@@ -1288,15 +1367,48 @@ DateTimePatternGenerator::addCanonicalItems(UErrorCode& status) {
 
 void
 DateTimePatternGenerator::setDateTimeFormat(const UnicodeString& dtFormat) {
-    dateTimeFormat = dtFormat;
-    // NUL-terminate for the C API.
-    dateTimeFormat.getTerminatedBuffer();
+    UErrorCode status = U_ZERO_ERROR;
+    for (int32_t style = UDAT_FULL; style <= UDAT_SHORT; style++) {
+        setDateTimeFormat((UDateFormatStyle)style, dtFormat, status);
+    }
 }
 
 const UnicodeString&
 DateTimePatternGenerator::getDateTimeFormat() const {
-    return dateTimeFormat;
+    UErrorCode status = U_ZERO_ERROR;
+    return getDateTimeFormat(UDAT_MEDIUM, status);
 }
+
+void
+DateTimePatternGenerator::setDateTimeFormat(UDateFormatStyle style, const UnicodeString& dtFormat, UErrorCode& status) {
+    if (U_FAILURE(status)) {
+        return;
+    }
+    if (style < UDAT_FULL || style > UDAT_SHORT) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+    dateTimeFormat[style] = dtFormat;
+    // Note for the following: getTerminatedBuffer() can re-allocate the UnicodeString
+    // buffer so we do this here before clients request a const ref to the UnicodeString
+    // or its buffer.
+    dateTimeFormat[style].getTerminatedBuffer(); // NUL-terminate for the C API.
+}
+
+const UnicodeString&
+DateTimePatternGenerator::getDateTimeFormat(UDateFormatStyle style, UErrorCode& status) const {
+    static const UnicodeString emptyString = UNICODE_STRING_SIMPLE("");
+    if (U_FAILURE(status)) {
+        return emptyString;
+    }
+    if (style < UDAT_FULL || style > UDAT_SHORT) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return emptyString;
+    }
+    return dateTimeFormat[style];
+}
+
+static const int32_t cTypeBufMax = 32;
 
 void
 DateTimePatternGenerator::setDateTimeFromCalendar(const Locale& locale, UErrorCode& status) {
@@ -1305,39 +1417,69 @@ DateTimePatternGenerator::setDateTimeFromCalendar(const Locale& locale, UErrorCo
     const UChar *resStr;
     int32_t resStrLen = 0;
 
-    LocalPointer<Calendar> fCalendar(Calendar::createInstance(locale, status), status);
-    if (U_FAILURE(status)) { return; }
-
     LocalUResourceBundlePointer calData(ures_open(nullptr, locale.getBaseName(), &status));
     if (U_FAILURE(status)) { return; }
     ures_getByKey(calData.getAlias(), DT_DateTimeCalendarTag, calData.getAlias(), &status);
     if (U_FAILURE(status)) { return; }
 
-    LocalUResourceBundlePointer dateTimePatterns;
-    if (fCalendar->getType() != nullptr && *fCalendar->getType() != '\0'
-            && uprv_strcmp(fCalendar->getType(), DT_DateTimeGregorianTag) != 0) {
-        dateTimePatterns.adoptInstead(ures_getByKeyWithFallback(calData.getAlias(), fCalendar->getType(),
-                                                                nullptr, &status));
-        ures_getByKeyWithFallback(dateTimePatterns.getAlias(), DT_DateTimePatternsTag,
-                                  dateTimePatterns.getAlias(), &status);
+    char cType[cTypeBufMax + 1];
+    Calendar::getCalendarTypeFromLocale(locale, cType, cTypeBufMax, status);
+    cType[cTypeBufMax] = 0;
+    if (U_FAILURE(status) || cType[0] == 0) {
+        status = U_ZERO_ERROR;
+        uprv_strcpy(cType, DT_DateTimeGregorianTag);
     }
+    UBool cTypeIsGregorian = (uprv_strcmp(cType, DT_DateTimeGregorianTag) == 0);
 
+    // Currently, for compatibility with pre-CLDR-42 data, we default to the "atTime"
+    // combining patterns. Depending on guidance in CLDR 42 spec and on DisplayOptions,
+    // we may change this.
+    LocalUResourceBundlePointer specificCalBundle;
+    LocalUResourceBundlePointer dateTimePatterns;
+    int32_t dateTimeOffset = 0; // initially for DateTimePatterns%atTime
+    if (!cTypeIsGregorian) {
+        specificCalBundle.adoptInstead(ures_getByKeyWithFallback(calData.getAlias(), cType,
+                                        nullptr, &status));
+        dateTimePatterns.adoptInstead(ures_getByKeyWithFallback(specificCalBundle.getAlias(), DT_DateAtTimePatternsTag, // the %atTime variant, 4 entries
+                                        nullptr, &status));
+    }
     if (dateTimePatterns.isNull() || status == U_MISSING_RESOURCE_ERROR) {
         status = U_ZERO_ERROR;
-        dateTimePatterns.adoptInstead(ures_getByKeyWithFallback(calData.getAlias(), DT_DateTimeGregorianTag,
-                                                                dateTimePatterns.orphan(), &status));
-        ures_getByKeyWithFallback(dateTimePatterns.getAlias(), DT_DateTimePatternsTag,
-                                  dateTimePatterns.getAlias(), &status);
+        specificCalBundle.adoptInstead(ures_getByKeyWithFallback(calData.getAlias(), DT_DateTimeGregorianTag,
+                                        nullptr, &status));
+        dateTimePatterns.adoptInstead(ures_getByKeyWithFallback(specificCalBundle.getAlias(), DT_DateAtTimePatternsTag, // the %atTime variant, 4 entries
+                                        nullptr, &status));
+    }
+    if (U_SUCCESS(status) && (ures_getSize(dateTimePatterns.getAlias()) < 4)) {
+        status = U_INVALID_FORMAT_ERROR;
+    }
+    if (status == U_MISSING_RESOURCE_ERROR) {
+        // Try again with standard variant
+        status = U_ZERO_ERROR;
+        dateTimePatterns.orphan();
+        dateTimeOffset = (int32_t)DateFormat::kDateTimeOffset;
+        if (!cTypeIsGregorian) {
+            specificCalBundle.adoptInstead(ures_getByKeyWithFallback(calData.getAlias(), cType,
+                                            nullptr, &status));
+            dateTimePatterns.adoptInstead(ures_getByKeyWithFallback(specificCalBundle.getAlias(), DT_DateTimePatternsTag, // the standard variant, 13 entries
+                                            nullptr, &status));
+        }
+        if (dateTimePatterns.isNull() || status == U_MISSING_RESOURCE_ERROR) {
+            status = U_ZERO_ERROR;
+            specificCalBundle.adoptInstead(ures_getByKeyWithFallback(calData.getAlias(), DT_DateTimeGregorianTag,
+                                            nullptr, &status));
+            dateTimePatterns.adoptInstead(ures_getByKeyWithFallback(specificCalBundle.getAlias(), DT_DateTimePatternsTag, // the standard variant, 13 entries
+                                            nullptr, &status));
+        }
+        if (U_SUCCESS(status) && (ures_getSize(dateTimePatterns.getAlias()) <= DateFormat::kDateTimeOffset + DateFormat::kShort)) {
+            status = U_INVALID_FORMAT_ERROR;
+        }
     }
     if (U_FAILURE(status)) { return; }
-
-    if (ures_getSize(dateTimePatterns.getAlias()) <= DateFormat::kDateTime)
-    {
-        status = U_INVALID_FORMAT_ERROR;
-        return;
+    for (int32_t style = UDAT_FULL; style <= UDAT_SHORT; style++) {
+        resStr = ures_getStringByIndex(dateTimePatterns.getAlias(), dateTimeOffset + style, &resStrLen, &status);
+        setDateTimeFormat((UDateFormatStyle)style, UnicodeString(true, resStr, resStrLen), status);
     }
-    resStr = ures_getStringByIndex(dateTimePatterns.getAlias(), (int32_t)DateFormat::kDateTime, &resStrLen, &status);
-    setDateTimeFormat(UnicodeString(TRUE, resStr, resStrLen));
 }
 
 void
@@ -1479,6 +1621,7 @@ DateTimePatternGenerator::getBestRaw(DateTimeMatcher& source,
                                      UErrorCode &status,
                                      const PtnSkeleton** specifiedSkeletonPtr) {
     int32_t bestDistance = 0x7fffffff;
+    int32_t bestMissingFieldMask = -1;
     DistanceInfo tempInfo;
     const UnicodeString *bestPattern=nullptr;
     const PtnSkeleton* specifiedSkeleton=nullptr;
@@ -1492,8 +1635,15 @@ DateTimePatternGenerator::getBestRaw(DateTimeMatcher& source,
             continue;
         }
         int32_t distance=source.getDistance(trial, includeMask, tempInfo);
-        if (distance<bestDistance) {
+        // Because we iterate over a map the order is undefined. Can change between implementations,
+        // versions, and will very likely be different between Java and C/C++.
+        // So if we have patterns with the same distance we also look at the missingFieldMask,
+        // and we favour the smallest one. Because the field is a bitmask this technically means we
+        // favour differences in the "least significant fields". For example we prefer the one with differences
+        // in seconds field vs one with difference in the hours field.
+        if (distance<bestDistance || (distance==bestDistance && bestMissingFieldMask<tempInfo.missingFieldMask)) {
             bestDistance=distance;
+            bestMissingFieldMask=tempInfo.missingFieldMask;
             bestPattern=patternMap->getPatternFromSkeleton(*trial.getSkeletonPtr(), &specifiedSkeleton);
             missingFields->setTo(tempInfo);
             if (distance==0) {
@@ -1546,14 +1696,16 @@ DateTimePatternGenerator::adjustFieldTypes(const UnicodeString& pattern,
                 dtMatcher->skeleton.original.appendFieldTo(UDATPG_FRACTIONAL_SECOND_FIELD, field);
             } else if (dtMatcher->skeleton.type[typeValue]!=0) {
                     // Here:
-                    // - "reqField" is the field from the originally requested skeleton, with length
-                    // "reqFieldLen".
+                    // - "reqField" is the field from the originally requested skeleton after replacement
+                    // of metacharacters 'j', 'C' and 'J', with length "reqFieldLen".
                     // - "field" is the field from the found pattern.
                     //
                     // The adjusted field should consist of characters from the originally requested
-                    // skeleton, except in the case of UDATPG_HOUR_FIELD or UDATPG_MONTH_FIELD or
+                    // skeleton, except in the case of UDATPG_MONTH_FIELD or
                     // UDATPG_WEEKDAY_FIELD or UDATPG_YEAR_FIELD, in which case it should consist
-                    // of characters from the  found pattern.
+                    // of characters from the found pattern. In some cases of UDATPG_HOUR_FIELD,
+                    // there is adjustment following the "defaultHourFormatChar". There is explanation
+                    // how it is done below.
                     //
                     // The length of the adjusted field (adjFieldLen) should match that in the originally
                     // requested skeleton, except that in the following cases the length of the adjusted field
@@ -1576,7 +1728,11 @@ DateTimePatternGenerator::adjustFieldTypes(const UnicodeString& pattern,
                          (typeValue==UDATPG_MINUTE_FIELD && (options & UDATPG_MATCH_MINUTE_FIELD_LENGTH)==0) ||
                          (typeValue==UDATPG_SECOND_FIELD && (options & UDATPG_MATCH_SECOND_FIELD_LENGTH)==0) ) {
                          adjFieldLen = field.length();
-                    } else if (specifiedSkeleton) {
+                    } else if (specifiedSkeleton && reqFieldChar != dtptngen_LOW_C && reqFieldChar != dtptngen_LOW_E) {
+                        // (we skip this section for 'c' and 'e' because unlike the other characters considered in this function,
+                        // they have no minimum field length-- 'E' and 'EE' are equivalent to 'EEE', but 'e' and 'ee' are not
+                        // equivalent to 'eee' -- see the entries for "week day" in
+                        // https://www.unicode.org/reports/tr35/tr35-dates.html#Date_Field_Symbol_Table for more info)
                         int32_t skelFieldLen = specifiedSkeleton->original.getFieldLength(typeValue);
                         UBool patFieldIsNumeric = (row->type > 0);
                         UBool skelFieldIsNumeric = (specifiedSkeleton->type[typeValue] > 0);
@@ -1591,9 +1747,31 @@ DateTimePatternGenerator::adjustFieldTypes(const UnicodeString& pattern,
                             && (typeValue!= UDATPG_YEAR_FIELD || reqFieldChar==dtptngen_CAP_Y))
                             ? reqFieldChar
                             : field.charAt(0);
-                    if (typeValue == UDATPG_HOUR_FIELD && (flags & kDTPGSkeletonUsesCapJ) != 0) {
-                        c = fDefaultHourFormatChar;
+                    if (c == dtptngen_CAP_E && adjFieldLen < 3) {
+                        c = dtptngen_LOW_E;
                     }
+                    if (typeValue == UDATPG_HOUR_FIELD && fDefaultHourFormatChar != 0) {
+                        // The adjustment here is required to match spec (https://www.unicode.org/reports/tr35/tr35-dates.html#dfst-hour).
+                        // It is necessary to match the hour-cycle preferred by the Locale.
+                        // Given that, we need to do the following adjustments:
+                        // 1. When hour-cycle is h11 it should replace 'h' by 'K'.
+                        // 2. When hour-cycle is h23 it should replace 'H' by 'k'.
+                        // 3. When hour-cycle is h24 it should replace 'k' by 'H'.
+                        // 4. When hour-cycle is h12 it should replace 'K' by 'h'.
+
+                        if ((flags & kDTPGSkeletonUsesCapJ) != 0 || reqFieldChar == fDefaultHourFormatChar) {
+                            c = fDefaultHourFormatChar;
+                        } else if (reqFieldChar == dtptngen_LOW_H && fDefaultHourFormatChar == dtptngen_CAP_K) {
+                            c = dtptngen_CAP_K;
+                        } else if (reqFieldChar == dtptngen_CAP_H && fDefaultHourFormatChar == dtptngen_LOW_K) {
+                            c = dtptngen_LOW_K;
+                        } else if (reqFieldChar == dtptngen_LOW_K && fDefaultHourFormatChar == dtptngen_CAP_H) {
+                            c = dtptngen_CAP_H;
+                        } else if (reqFieldChar == dtptngen_CAP_K && fDefaultHourFormatChar == dtptngen_LOW_H) {
+                            c = dtptngen_LOW_H;
+                        }
+                    }
+
                     field.remove();
                     for (int32_t j=adjFieldLen; j>0; --j) {
                         field += c;
@@ -1808,14 +1986,14 @@ DateTimePatternGenerator::getRedundants(UErrorCode& status) {
 UBool
 DateTimePatternGenerator::isCanonicalItem(const UnicodeString& item) const {
     if ( item.length() != 1 ) {
-        return FALSE;
+        return false;
     }
     for (int32_t i=0; i<UDATPG_FIELD_COUNT; ++i) {
         if (item.charAt(0)==Canonical_Items[i]) {
-            return TRUE;
+            return true;
         }
     }
-    return FALSE;
+    return false;
 }
 
 
@@ -1828,7 +2006,7 @@ PatternMap::PatternMap() {
    for (int32_t i=0; i < dtptngen_MAX_PATTERN_ENTRIES; ++i ) {
        boot[i] = nullptr;
    }
-   isDupAllowed = TRUE;
+   isDupAllowed = true;
 }
 
 void
@@ -1862,7 +2040,7 @@ PatternMap::copyFrom(const PatternMap& other, UErrorCode& status) {
                 if (prevElem != nullptr) {
                     prevElem->next.adoptInstead(curElem);
                 } else {
-                    UPRV_UNREACHABLE;
+                    UPRV_UNREACHABLE_EXIT;
                 }
             }
             prevElem = curElem;
@@ -2040,14 +2218,14 @@ PatternMap::getPatternFromSkeleton(const PtnSkeleton& skeleton, const PtnSkeleto
 UBool
 PatternMap::equals(const PatternMap& other) const {
     if ( this==&other ) {
-        return TRUE;
+        return true;
     }
     for (int32_t bootIndex = 0; bootIndex < dtptngen_MAX_PATTERN_ENTRIES; ++bootIndex) {
         if (boot[bootIndex] == other.boot[bootIndex]) {
             continue;
         }
         if ((boot[bootIndex] == nullptr) || (other.boot[bootIndex] == nullptr)) {
-            return FALSE;
+            return false;
         }
         PtnElem *otherElem = other.boot[bootIndex];
         PtnElem *myElem = boot[bootIndex];
@@ -2056,25 +2234,25 @@ PatternMap::equals(const PatternMap& other) const {
                 break;
             }
             if ((otherElem == nullptr) || (myElem == nullptr)) {
-                return FALSE;
+                return false;
             }
             if ( (myElem->basePattern != otherElem->basePattern) ||
                  (myElem->pattern != otherElem->pattern) ) {
-                return FALSE;
+                return false;
             }
             if ((myElem->skeleton.getAlias() != otherElem->skeleton.getAlias()) &&
                 !myElem->skeleton->equals(*(otherElem->skeleton))) {
-                return FALSE;
+                return false;
             }
             myElem = myElem->next.getAlias();
             otherElem = otherElem->next.getAlias();
         }
     }
-    return TRUE;
+    return true;
 }
 
 // find any key existing in the mapping table already.
-// return TRUE if there is an existing key, otherwise return FALSE.
+// return true if there is an existing key, otherwise return false.
 PtnElem*
 PatternMap::getDuplicateElem(
             const UnicodeString &basePattern,
@@ -2090,10 +2268,10 @@ PatternMap::getDuplicateElem(
    }
    do {
      if ( basePattern.compare(curElem->basePattern)==0 ) {
-         UBool isEqual = TRUE;
+         UBool isEqual = true;
          for (int32_t i = 0; i < UDATPG_FIELD_COUNT; ++i) {
             if (curElem->skeleton->type[i] != skeleton.type[i] ) {
-                isEqual = FALSE;
+                isEqual = false;
                 break;
             }
         }
@@ -2118,6 +2296,11 @@ DateTimeMatcher::DateTimeMatcher(const DateTimeMatcher& other) {
     copyFrom(other.skeleton);
 }
 
+DateTimeMatcher& DateTimeMatcher::operator=(const DateTimeMatcher& other) {
+    copyFrom(other.skeleton);
+    return *this;
+}
+
 
 void
 DateTimeMatcher::set(const UnicodeString& pattern, FormatParser* fp) {
@@ -2133,7 +2316,7 @@ DateTimeMatcher::set(const UnicodeString& pattern, FormatParser* fp, PtnSkeleton
     }
     skeletonResult.original.clear();
     skeletonResult.baseOriginal.clear();
-    skeletonResult.addedDefaultDayPeriod = FALSE;
+    skeletonResult.addedDefaultDayPeriod = false;
 
     fp->set(pattern);
     for (i=0; i < fp->itemNumber; i++) {
@@ -2162,6 +2345,33 @@ DateTimeMatcher::set(const UnicodeString& pattern, FormatParser* fp, PtnSkeleton
         }
         skeletonResult.type[field] = subField;
     }
+
+    // #20739, we have a skeleton with minutes and milliseconds, but no seconds
+    //
+    // Theoretically we would need to check and fix all fields with "gaps":
+    // for example year-day (no month), month-hour (no day), and so on, All the possible field combinations.
+    // Plus some smartness: year + hour => should we add month, or add day-of-year?
+    // What about month + day-of-week, or month + am/pm indicator.
+    // I think beyond a certain point we should not try to fix bad developer input and try guessing what they mean.
+    // Garbage in, garbage out.
+    if (!skeletonResult.original.isFieldEmpty(UDATPG_MINUTE_FIELD)
+        && !skeletonResult.original.isFieldEmpty(UDATPG_FRACTIONAL_SECOND_FIELD)
+        && skeletonResult.original.isFieldEmpty(UDATPG_SECOND_FIELD)) {
+        // Force the use of seconds
+        for (i = 0; dtTypes[i].patternChar != 0; i++) {
+            if (dtTypes[i].field == UDATPG_SECOND_FIELD) {
+                // first entry for UDATPG_SECOND_FIELD
+                skeletonResult.original.populate(UDATPG_SECOND_FIELD, dtTypes[i].patternChar, dtTypes[i].minLen);
+                skeletonResult.baseOriginal.populate(UDATPG_SECOND_FIELD, dtTypes[i].patternChar, dtTypes[i].minLen);
+                // We add value.length, same as above, when type is first initialized.
+                // The value we want to "fake" here is "s", and 1 means "s".length()
+                int16_t subField = dtTypes[i].type;
+                skeletonResult.type[UDATPG_SECOND_FIELD] = (subField > 0) ? subField + 1 : subField;
+                break;
+            }
+        }
+    }
+
     // #13183, handle special behavior for day period characters (a, b, B)
     if (!skeletonResult.original.isFieldEmpty(UDATPG_HOUR_FIELD)) {
         if (skeletonResult.original.getFieldChar(UDATPG_HOUR_FIELD)==dtptngen_LOW_H || skeletonResult.original.getFieldChar(UDATPG_HOUR_FIELD)==dtptngen_CAP_K) {
@@ -2174,7 +2384,7 @@ DateTimeMatcher::set(const UnicodeString& pattern, FormatParser* fp, PtnSkeleton
                         skeletonResult.original.populate(UDATPG_DAYPERIOD_FIELD, dtTypes[i].patternChar, dtTypes[i].minLen);
                         skeletonResult.baseOriginal.populate(UDATPG_DAYPERIOD_FIELD, dtTypes[i].patternChar, dtTypes[i].minLen);
                         skeletonResult.type[UDATPG_DAYPERIOD_FIELD] = dtTypes[i].type;
-                        skeletonResult.addedDefaultDayPeriod = TRUE;
+                        skeletonResult.addedDefaultDayPeriod = true;
                         break;
                     }
                 }
@@ -2242,7 +2452,7 @@ DateTimeMatcher::copyFrom() {
 
 UBool
 DateTimeMatcher::equals(const DateTimeMatcher* other) const {
-    if (other==nullptr) { return FALSE; }
+    if (other==nullptr) { return false; }
     return skeleton.original == other->skeleton.original;
 }
 
@@ -2401,10 +2611,10 @@ FormatParser::isPatternSeparator(const UnicodeString& field) const {
             continue;
         }
         else {
-            return FALSE;
+            return false;
         }
     }
-    return TRUE;
+    return true;
 }
 
 DistanceInfo::~DistanceInfo() {}
@@ -2446,12 +2656,12 @@ PatternMapIterator::hasNext() const {
     PtnElem *curPtr = nodePtr;
 
     if (patternMap==nullptr) {
-        return FALSE;
+        return false;
     }
     while ( headIndex < dtptngen_MAX_PATTERN_ENTRIES ) {
         if ( curPtr != nullptr ) {
             if ( curPtr->next != nullptr ) {
-                return TRUE;
+                return true;
             }
             else {
                 headIndex++;
@@ -2461,7 +2671,7 @@ PatternMapIterator::hasNext() const {
         }
         else {
             if ( patternMap->boot[headIndex] != nullptr ) {
-                return TRUE;
+                return true;
             }
             else {
                 headIndex++;
@@ -2469,7 +2679,7 @@ PatternMapIterator::hasNext() const {
             }
         }
     }
-    return FALSE;
+    return false;
 }
 
 DateTimeMatcher&
@@ -2576,7 +2786,7 @@ UChar SkeletonFields::getFirstChar() const {
 
 
 PtnSkeleton::PtnSkeleton()
-    : addedDefaultDayPeriod(FALSE) {
+    : addedDefaultDayPeriod(false) {
 }
 
 PtnSkeleton::PtnSkeleton(const PtnSkeleton& other) {
@@ -2673,7 +2883,7 @@ DTSkeletonEnumeration::DTSkeletonEnumeration(PatternMap& patternMap, dtStrEnum t
                     break;
             }
             if ( !isCanonicalItem(s) ) {
-                LocalPointer<UnicodeString> newElem(new UnicodeString(s), status);
+                LocalPointer<UnicodeString> newElem(s.clone(), status);
                 if (U_FAILURE(status)) {
                     return;
                 }
@@ -2682,7 +2892,8 @@ DTSkeletonEnumeration::DTSkeletonEnumeration(PatternMap& patternMap, dtStrEnum t
                     fSkeletons.adoptInstead(nullptr);
                     return;
                 }
-                newElem.orphan(); // fSkeletons vector now owns the UnicodeString.
+                newElem.orphan(); // fSkeletons vector now owns the UnicodeString (although it
+                                  // does not use a deleter function to manage the ownership).
             }
             curElem = curElem->next.getAlias();
         }
@@ -2713,14 +2924,14 @@ DTSkeletonEnumeration::count(UErrorCode& /*status*/) const {
 UBool
 DTSkeletonEnumeration::isCanonicalItem(const UnicodeString& item) {
     if ( item.length() != 1 ) {
-        return FALSE;
+        return false;
     }
     for (int32_t i=0; i<UDATPG_FIELD_COUNT; ++i) {
         if (item.charAt(0)==Canonical_Items[i]) {
-            return TRUE;
+            return true;
         }
     }
-    return FALSE;
+    return false;
 }
 
 DTSkeletonEnumeration::~DTSkeletonEnumeration() {
@@ -2755,7 +2966,8 @@ DTRedundantEnumeration::add(const UnicodeString& pattern, UErrorCode& status) {
         fPatterns.adoptInstead(nullptr);
         return;
     }
-    newElem.orphan(); // fPatterns now owns the string.
+    newElem.orphan(); // fPatterns now owns the string, although a UVector
+                      // deleter function is not used to manage that ownership.
 }
 
 const UnicodeString*
@@ -2779,14 +2991,14 @@ DTRedundantEnumeration::count(UErrorCode& /*status*/) const {
 UBool
 DTRedundantEnumeration::isCanonicalItem(const UnicodeString& item) const {
     if ( item.length() != 1 ) {
-        return FALSE;
+        return false;
     }
     for (int32_t i=0; i<UDATPG_FIELD_COUNT; ++i) {
         if (item.charAt(0)==Canonical_Items[i]) {
-            return TRUE;
+            return true;
         }
     }
-    return FALSE;
+    return false;
 }
 
 DTRedundantEnumeration::~DTRedundantEnumeration() {

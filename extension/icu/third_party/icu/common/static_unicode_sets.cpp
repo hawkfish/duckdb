@@ -25,7 +25,7 @@ using namespace icu::unisets;
 
 namespace {
 
-UnicodeSet* gUnicodeSets[UNISET_KEY_UNISETS_KEY_COUNT] = {};
+UnicodeSet* gUnicodeSets[UNISETS_KEY_COUNT] = {};
 
 // Save the empty instance in static memory to have well-defined behavior if a
 // regular UnicodeSet cannot be allocated.
@@ -33,7 +33,7 @@ alignas(UnicodeSet)
 char gEmptyUnicodeSet[sizeof(UnicodeSet)];
 
 // Whether the gEmptyUnicodeSet is initialized and ready to use.
-UBool gEmptyUnicodeSetInitialized = FALSE;
+UBool gEmptyUnicodeSetInitialized = false;
 
 inline UnicodeSet* getImpl(Key key) {
     UnicodeSet* candidate = gUnicodeSets[key];
@@ -120,7 +120,7 @@ class ParseDataSink : public ResourceSink {
                         } else {
                             // Unknown class of parse lenients
                             // TODO(ICU-20428): Make ICU automatically accept new classes?
-                            U_ASSERT(FALSE);
+                            U_ASSERT(false);
                         }
                         if (U_FAILURE(status)) { return; }
                     }
@@ -131,19 +131,19 @@ class ParseDataSink : public ResourceSink {
 };
 
 
-icu::UInitOnce gNumberParseUniSetsInitOnce = U_INITONCE_INITIALIZER;
+icu::UInitOnce gNumberParseUniSetsInitOnce {};
 
 UBool U_CALLCONV cleanupNumberParseUniSets() {
     if (gEmptyUnicodeSetInitialized) {
         reinterpret_cast<UnicodeSet*>(gEmptyUnicodeSet)->~UnicodeSet();
-        gEmptyUnicodeSetInitialized = FALSE;
+        gEmptyUnicodeSetInitialized = false;
     }
-    for (int32_t i = 0; i < UNISET_KEY_UNISETS_KEY_COUNT; i++) {
+    for (int32_t i = 0; i < UNISETS_KEY_COUNT; i++) {
         delete gUnicodeSets[i];
         gUnicodeSets[i] = nullptr;
     }
     gNumberParseUniSetsInitOnce.reset();
-    return TRUE;
+    return true;
 }
 
 void U_CALLCONV initNumberParseUniSets(UErrorCode& status) {
@@ -152,7 +152,7 @@ void U_CALLCONV initNumberParseUniSets(UErrorCode& status) {
     // Initialize the empty instance for well-defined fallback behavior
     new(gEmptyUnicodeSet) UnicodeSet();
     reinterpret_cast<UnicodeSet*>(gEmptyUnicodeSet)->freeze();
-    gEmptyUnicodeSetInitialized = TRUE;
+    gEmptyUnicodeSetInitialized = true;
 
     // These sets were decided after discussion with icu-design@. See tickets #13084 and #13309.
     // Zs+TAB is "horizontal whitespace" according to UTS #18 (blank property).

@@ -143,7 +143,7 @@ EthiopicCalendar::handleGetLimit(UCalendarDateFields field, ELimitType limitType
  */
 static UDate           gethpccal_gSystemDefaultCenturyStart       = DBL_MIN;
 static int32_t         gethpccal_gSystemDefaultCenturyStartYear   = -1;
-static icu::UInitOnce  gethpccal_gSystemDefaultCenturyInit        = U_INITONCE_INITIALIZER;
+static icu::UInitOnce  gethpccal_gSystemDefaultCenturyInit        {};
 
 static void U_CALLCONV ethpccal_initializeSystemDefaultCentury()
 {

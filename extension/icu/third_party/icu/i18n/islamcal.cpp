@@ -67,7 +67,7 @@ static UBool calendar_islamic_cleanup(void) {
         delete gIslamicCalendarAstro;
         gIslamicCalendarAstro = NULL;
     }
-    return TRUE;
+    return true;
 }
 U_CDECL_END
 
@@ -222,7 +222,7 @@ const char *IslamicCalendar::getType() const {
         sType = "islamic-umalqura";
         break;
     default:
-        UPRV_UNREACHABLE; // out of range
+        UPRV_UNREACHABLE_EXIT; // out of range
     }
     return sType;
 }
@@ -232,7 +232,7 @@ IslamicCalendar* IslamicCalendar::clone() const {
 }
 
 IslamicCalendar::IslamicCalendar(const Locale& aLocale, UErrorCode& success, ECalculationType type)
-:   Calendar(TimeZone::createDefault(), aLocale, success),
+:   Calendar(TimeZone::forLocaleOrDefault(aLocale), aLocale, success),
 cType(type)
 {
     setTimeInMillis(getNow(), success); // Call this again now that the vtable is set up properly.
@@ -675,7 +675,7 @@ void IslamicCalendar::handleComputeFields(int32_t julianDay, UErrorCode &status)
                 month = m;
             }
     } else { // invalid 'civil'
-      UPRV_UNREACHABLE; // should not get here, out of range
+      UPRV_UNREACHABLE_EXIT; // should not get here, out of range
     }
 
     dayOfMonth = (days - monthStart(year, month)) + 1;
@@ -697,12 +697,12 @@ IslamicCalendar::inDaylightTime(UErrorCode& status) const
 {
     // copied from GregorianCalendar
     if (U_FAILURE(status) || !getTimeZone().useDaylightTime())
-        return FALSE;
+        return false;
 
     // Force an update of the state of the Calendar.
     ((IslamicCalendar*)this)->complete(status); // cast away const
 
-    return (UBool)(U_SUCCESS(status) ? (internalGet(UCAL_DST_OFFSET) != 0) : FALSE);
+    return (UBool)(U_SUCCESS(status) ? (internalGet(UCAL_DST_OFFSET) != 0) : false);
 }
 
 /**
@@ -712,12 +712,12 @@ IslamicCalendar::inDaylightTime(UErrorCode& status) const
  */
 static UDate           islamcal_gSystemDefaultCenturyStart       = DBL_MIN;
 static int32_t         islamcal_gSystemDefaultCenturyStartYear   = -1;
-static icu::UInitOnce  islamcal_gSystemDefaultCenturyInit        = U_INITONCE_INITIALIZER;
+static icu::UInitOnce  islamcal_gSystemDefaultCenturyInit        {};
 
 
 UBool IslamicCalendar::haveDefaultCentury() const
 {
-    return TRUE;
+    return true;
 }
 
 UDate IslamicCalendar::defaultCenturyStart() const

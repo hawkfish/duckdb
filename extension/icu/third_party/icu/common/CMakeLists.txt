@@ -22,6 +22,7 @@ add_library_unity(
   dictionarydata.cpp
   dtintrv.cpp
   edits.cpp
+  emojiprops.cpp
   errorcode.cpp
   filteredbrk.cpp
   filterednormalizer2.cpp

@@ -140,11 +140,11 @@ void TaiwanCalendar::timeToFields(UDate theTime, UBool quick, UErrorCode& status
  */
 static UDate           taiwncal_gSystemDefaultCenturyStart       = DBL_MIN;
 static int32_t         taiwncal_gSystemDefaultCenturyStartYear   = -1;
-static icu::UInitOnce  taiwncal_gSystemDefaultCenturyInit        = U_INITONCE_INITIALIZER;
+static icu::UInitOnce  taiwncal_gSystemDefaultCenturyInit        {};
 
 UBool TaiwanCalendar::haveDefaultCentury() const
 {
-    return TRUE;
+    return true;
 }
 
 static void U_CALLCONV taiwncal_initializeSystemDefaultCentury()

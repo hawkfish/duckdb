@@ -21,6 +21,10 @@
 #define U_COMMON_IMPLEMENTATION
 #endif
 
+#ifndef U_I18N_IMPLEMENTATION
+#define U_I18N_IMPLEMENTATION
+#endif
+
 #ifndef U_STATIC_IMPLEMENTATION
 #define U_STATIC_IMPLEMENTATION
 #endif
@@ -125,6 +129,24 @@
  */
 #ifndef U_DISABLE_RENAMING
 #define U_DISABLE_RENAMING 0
+#endif
+
+/**
+ * \def U_NO_DEFAULT_INCLUDE_UTF_HEADERS
+ * Determines whether utypes.h includes utf.h, utf8.h, utf16.h and utf_old.h.
+ * utypes.h includes those headers if this macro is defined to 0.
+ * Otherwise, each those headers must be included explicitly when using one of their macros.
+ * Defaults to 0 for backward compatibility, except inside ICU.
+ * @stable ICU 49
+ */
+#ifdef U_NO_DEFAULT_INCLUDE_UTF_HEADERS
+    /* Use the predefined value. */
+#elif defined(U_COMBINED_IMPLEMENTATION) || defined(U_COMMON_IMPLEMENTATION) || defined(U_I18N_IMPLEMENTATION) || \
+      defined(U_IO_IMPLEMENTATION) || defined(U_LAYOUT_IMPLEMENTATION) || defined(U_LAYOUTEX_IMPLEMENTATION) || \
+      defined(U_TOOLUTIL_IMPLEMENTATION)
+#   define U_NO_DEFAULT_INCLUDE_UTF_HEADERS 1
+#else
+#   define U_NO_DEFAULT_INCLUDE_UTF_HEADERS 0
 #endif
 
 /**

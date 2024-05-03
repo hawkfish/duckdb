@@ -72,7 +72,7 @@ enum Key {
     UNISET_KEY_DIGITS_OR_STRICT_ALL_SEPARATORS,
 
     // The number of elements in the enum.
-    UNISET_KEY_UNISETS_KEY_COUNT
+    UNISETS_KEY_COUNT
 };
 
 /**

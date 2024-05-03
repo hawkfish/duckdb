@@ -64,11 +64,13 @@
 #define dtitv_impl_LOW_Z             ((UChar)0x007A)
 
 #define dtitv_impl_CAP_A             ((UChar)0x0041)
+#define dtitv_impl_CAP_B             ((UChar)0x0042)
 #define dtitv_impl_CAP_C             ((UChar)0x0043)
 #define dtitv_impl_CAP_D             ((UChar)0x0044)
 #define dtitv_impl_CAP_E             ((UChar)0x0045)
 #define dtitv_impl_CAP_F             ((UChar)0x0046)
 #define dtitv_impl_CAP_G             ((UChar)0x0047)
+#define dtitv_impl_CAP_J             ((UChar)0x004A)
 #define dtitv_impl_CAP_H             ((UChar)0x0048)
 #define dtitv_impl_CAP_K             ((UChar)0x004B)
 #define dtitv_impl_CAP_L             ((UChar)0x004C)
