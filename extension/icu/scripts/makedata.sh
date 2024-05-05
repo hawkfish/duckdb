@@ -11,19 +11,22 @@ set -e
 mkdir -p build
 pushd build
 
-# download ICU 66
-code_version=66-1
+# download DuckDB ICU (currently 72-1)
+code_version=72-1
 wget -nc ${icu/version/$code_version}
 unzip -o ${zip_file/version/$code_version}
 
-# download ICU 72 (replace with latest version)
+# download reference ICU (currently 72-1)
 data_version=72-1
-wget -nc ${icu/version/$data_version}
-unzip -o ${zip_file/version/$data_version}
+if [ $data_version -ne $code_version ]
+then
+    wget -nc ${icu/version/$data_version}
+    unzip -o ${zip_file/version/$data_version}
 
-# copy over the collation data
-find ${data_path/version/$data_version} -type f ! -iname "*.txt" -delete
-cp -r ${data_path/version/$data_version} ${source_path/version/$code_version}
+    # copy over the collation data
+    find ${data_path/version/$data_version} -type f ! -iname "*.txt" -delete
+    cp -r ${data_path/version/$data_version} ${source_path/version/$code_version}
+fi
 
 # download IANA and copy the latest Time Zone Data
 tz_version=2024a
