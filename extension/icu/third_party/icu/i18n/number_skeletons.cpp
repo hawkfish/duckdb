@@ -1594,7 +1594,7 @@ bool GeneratorHelpers::unit(const MacroProps& macros, UnicodeString& sb, UErrorC
         return true;
     } else {
         sb.append(u"unit/", -1);
-        sb.append(unit.getIdentifier());
+        sb.append(UnicodeString(unit.getIdentifier()));
         return true;
     }
 }

@@ -1732,7 +1732,7 @@ DateIntervalFormat::adjustFieldWidth(const UnicodeString& inputSkeleton,
         findReplaceInPattern(adjustedPtn, UnicodeString(u"a\u202F",-1), UnicodeString());
         findReplaceInPattern(adjustedPtn, UnicodeString(dtitv_impl_LOW_A), UnicodeString());
         // adjust interior double spaces, remove exterior whitespace
-        findReplaceInPattern(adjustedPtn, UnicodeString("  "), UnicodeString(" "));
+        findReplaceInPattern(adjustedPtn, UnicodeString(u"  "), UnicodeString(u" "));
         adjustedPtn.trim();
     }
     if ( differenceInfo == 2 ) {
