@@ -25,6 +25,10 @@
 #define U_I18N_IMPLEMENTATION
 #endif
 
+#ifndef U_CHARSET_IS_UTF8
+#define U_CHARSET_IS_UTF8 1
+#endif
+
 #ifndef U_STATIC_IMPLEMENTATION
 #define U_STATIC_IMPLEMENTATION
 #endif
