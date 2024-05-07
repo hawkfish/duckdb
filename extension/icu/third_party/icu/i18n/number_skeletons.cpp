@@ -1790,12 +1790,14 @@ UnicodeString NumberFormatterSettings<Derived>::toSkeleton(UErrorCode& status) c
     return skeleton::generate(fMacros, status);
 }
 
+#if (U_PF_WINDOWS <= U_PLATFORM && U_PLATFORM <= U_PF_CYGWIN) && defined(_MSC_VER)
 // Declare all classes that implement NumberFormatterSettings
 // See https://stackoverflow.com/a/495056/1407170
-// template
-// class icu::number::NumberFormatterSettings<icu::number::UnlocalizedNumberFormatter>;
-// template
-// class icu::number::NumberFormatterSettings<icu::number::LocalizedNumberFormatter>;
+template
+class icu::number::NumberFormatterSettings<icu::number::UnlocalizedNumberFormatter>;
+template
+class icu::number::NumberFormatterSettings<icu::number::LocalizedNumberFormatter>;
+#endif
 
 UnlocalizedNumberFormatter
 NumberFormatter::forSkeleton(const UnicodeString& skeleton, UErrorCode& status) {
