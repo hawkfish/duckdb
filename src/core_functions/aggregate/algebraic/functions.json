@@ -49,7 +49,7 @@
         "parameters": "x",
         "description": "Returns the population standard deviation.",
         "example": "sqrt(var_pop(x))",
-        "type": "aggregate_function",
+        "type": "aggregate_function_set",
         "struct": "StdDevPopFun"
     },
     {
@@ -57,7 +57,7 @@
         "parameters": "x",
         "description": "Returns the sample standard deviation",
         "example": "sqrt(var_samp(x))",
-        "type": "aggregate_function",
+        "type": "aggregate_function_set",
         "aliases": ["stddev"],
         "struct": "StdDevSampFun"
     },

@@ -81,7 +81,7 @@ struct StdDevPopFun {
 	static constexpr const char *Description = "Returns the population standard deviation.";
 	static constexpr const char *Example = "sqrt(var_pop(x))";
 
-	static AggregateFunction GetFunction();
+	static AggregateFunctionSet GetFunctions();
 };
 
 struct StdDevSampFun {
@@ -90,7 +90,7 @@ struct StdDevSampFun {
 	static constexpr const char *Description = "Returns the sample standard deviation";
 	static constexpr const char *Example = "sqrt(var_samp(x))";
 
-	static AggregateFunction GetFunction();
+	static AggregateFunctionSet GetFunctions();
 };
 
 struct StddevFun {

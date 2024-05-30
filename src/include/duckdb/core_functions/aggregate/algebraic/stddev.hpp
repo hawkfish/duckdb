@@ -17,7 +17,43 @@ struct StddevState {
 	uint64_t count;  //  n
 	double mean;     //  M1
 	double dsquared; //  M2
+
+	template<typename INPUT_TYPE>
+	static inline double Encode(const INPUT_TYPE& input) {
+		return input;
+	}
+
+	template<typename RESULT_TYPE>
+	static inline RESULT_TYPE Decode(const double& input) {
+		return input;
+	}
 };
+
+// Temporal types all return INTERVAL for their STDDEV
+template<>
+inline double StddevState::Encode(const date_t& input) {
+	return input.days * Interval::MICROS_PER_DAY;
+}
+
+template<>
+inline double StddevState::Encode(const dtime_t& input) {
+	return input.micros;
+}
+
+template<>
+inline double StddevState::Encode(const dtime_tz_t& input) {
+	return Encode(input.time());
+}
+
+template<>
+inline double StddevState::Encode(const timestamp_t& input) {
+	return input.value;
+}
+
+template<>
+inline interval_t StddevState::Decode(const double& input) {
+	return interval_t{0, 0, UnsafeNumericCast<int64_t>(input)};
+}
 
 // Streaming approximate standard deviation using Welford's
 // method, DOI: 10.2307/1266577
@@ -30,7 +66,8 @@ struct STDDevBaseOperation {
 	}
 
 	template <class INPUT_TYPE, class STATE>
-	static void Execute(STATE &state, const INPUT_TYPE &input) {
+	static void Execute(STATE &state, const INPUT_TYPE &decoded) {
+		const auto input = StddevState::Encode<INPUT_TYPE>(decoded);
 		// update running mean and d^2
 		state.count++;
 		const double mean_differential = (input - state.mean) / state.count;
@@ -109,10 +146,11 @@ struct STDDevSampOperation : public STDDevBaseOperation {
 		if (state.count <= 1) {
 			finalize_data.ReturnNull();
 		} else {
-			target = sqrt(state.dsquared / (state.count - 1));
-			if (!Value::DoubleIsFinite(target)) {
+			const auto encoded = sqrt(state.dsquared / (state.count - 1));
+			if (!Value::DoubleIsFinite(encoded)) {
 				throw OutOfRangeException("STDDEV_SAMP is out of range!");
 			}
+			target = STATE::template Decode<T>(encoded);
 		}
 	}
 };
@@ -123,10 +161,11 @@ struct STDDevPopOperation : public STDDevBaseOperation {
 		if (state.count == 0) {
 			finalize_data.ReturnNull();
 		} else {
-			target = state.count > 1 ? sqrt(state.dsquared / state.count) : 0;
-			if (!Value::DoubleIsFinite(target)) {
+			const auto encoded = state.count > 1 ? sqrt(state.dsquared / state.count) : 0;
+			if (!Value::DoubleIsFinite(encoded)) {
 				throw OutOfRangeException("STDDEV_POP is out of range!");
 			}
+			target = STATE::template Decode<T>(encoded);
 		}
 	}
 };

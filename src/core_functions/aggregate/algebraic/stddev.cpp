@@ -6,14 +6,42 @@
 
 namespace duckdb {
 
-AggregateFunction StdDevSampFun::GetFunction() {
-	return AggregateFunction::UnaryAggregate<StddevState, double, double, STDDevSampOperation>(LogicalType::DOUBLE,
-	                                                                                           LogicalType::DOUBLE);
+AggregateFunctionSet StdDevSampFun::GetFunctions() {
+	AggregateFunctionSet funcs;
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, double, double, STDDevSampOperation>(
+	    LogicalType::DOUBLE, LogicalType::DOUBLE));
+
+	// Temporal types all return INTERVAL for their STDDEV
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, date_t, interval_t, STDDevSampOperation>(
+	    LogicalType::DATE, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, dtime_t, interval_t, STDDevSampOperation>(
+	    LogicalType::TIME, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, dtime_tz_t, interval_t, STDDevSampOperation>(
+	    LogicalType::TIME_TZ, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, timestamp_t, interval_t, STDDevSampOperation>(
+	    LogicalType::TIMESTAMP, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, timestamp_t, interval_t, STDDevSampOperation>(
+	    LogicalType::TIMESTAMP_TZ, LogicalType::INTERVAL));
+	return funcs;
 }
 
-AggregateFunction StdDevPopFun::GetFunction() {
-	return AggregateFunction::UnaryAggregate<StddevState, double, double, STDDevPopOperation>(LogicalType::DOUBLE,
-	                                                                                          LogicalType::DOUBLE);
+AggregateFunctionSet StdDevPopFun::GetFunctions() {
+	AggregateFunctionSet funcs;
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, double, double, STDDevPopOperation>(
+	    LogicalType::DOUBLE, LogicalType::DOUBLE));
+
+	// Temporal types all return INTERVAL for their STDDEV
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, date_t, interval_t, STDDevPopOperation>(
+	    LogicalType::DATE, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, dtime_t, interval_t, STDDevPopOperation>(
+	    LogicalType::TIME, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, dtime_tz_t, interval_t, STDDevPopOperation>(
+	    LogicalType::TIME_TZ, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, timestamp_t, interval_t, STDDevPopOperation>(
+	    LogicalType::TIMESTAMP, LogicalType::INTERVAL));
+	funcs.AddFunction(AggregateFunction::UnaryAggregate<StddevState, timestamp_t, interval_t, STDDevPopOperation>(
+	    LogicalType::TIMESTAMP_TZ, LogicalType::INTERVAL));
+	return funcs;
 }
 
 AggregateFunction VarPopFun::GetFunction() {

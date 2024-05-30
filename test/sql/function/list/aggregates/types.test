@@ -276,7 +276,7 @@ SELECT list_aggr([NULL::INTERVAL], '${func_name}')
 endloop
 
 # statement error for TEMPORAL types
-foreach func_name favg bit_and bit_or bit_xor bool_and bool_or kurtosis product sem skewness sum fsum sumKahan kahan_sum var_samp var_pop stddev stddev_pop variance stddev_samp
+foreach func_name favg bit_and bit_or bit_xor bool_and bool_or kurtosis product sem skewness sum fsum sumKahan kahan_sum var_samp var_pop variance 
 
 foreach type date time timestamp timestamp_s timestamp_ms timestamp_ns timetz timestamptz
 
@@ -299,6 +299,20 @@ SELECT list_aggr(['2021-08-20'::${type}], 'avg')
 ----
 2021-08-20 00:00:00
 
+query T
+SELECT list_aggr(['2021-08-20'::${type}], 'stddev_pop')
+----
+00:00:00
+
+foreach func_name stddev stddev_samp
+
+query T
+SELECT list_aggr(['2021-08-20'::${type}], '${func_name}')
+----
+NULL
+
+endloop
+
 endloop
 
 foreach type time timetz
@@ -307,6 +321,20 @@ query T
 SELECT list_aggr(['2021-08-20'::${type}], 'avg')
 ----
 00:00:00
+
+query T
+SELECT list_aggr(['2021-08-20'::${type}], 'stddev_pop')
+----
+00:00:00
+
+foreach func_name stddev stddev_samp
+
+query T
+SELECT list_aggr(['2021-08-20'::${type}], '${func_name}')
+----
+NULL
+
+endloop
 
 endloop
 
