@@ -108,9 +108,10 @@ statement error
 SELECT AVG('hello')
 ----
 
-statement error
+query T
 SELECT AVG(DATE '1992-02-02')
 ----
+1992-02-02 00:00:00
 
 statement error
 SELECT AVG()

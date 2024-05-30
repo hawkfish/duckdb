@@ -100,7 +100,47 @@ struct IntegerAverageOperationHugeint : public BaseSumOperation<AverageSetOperat
 			finalize_data.ReturnNull();
 		} else {
 			long double divident = GetAverageDivident<long double>(state.count, finalize_data.input.bind_data);
-			target = Hugeint::Cast<long double>(state.value) / divident;
+			target = T(Hugeint::Cast<long double>(state.value) / divident);
+		}
+	}
+};
+
+// Averaging DATE is like averaging integers to produce a fixed point number (TIMESTAMP)
+struct IntegerAverageOperationDate : public BaseSumOperation<AverageSetOperation, AddToHugeint> {
+	template <class T, class STATE>
+	static void Finalize(STATE &state, T &target, AggregateFinalizeData &finalize_data) {
+		if (state.count == 0) {
+			finalize_data.ReturnNull();
+		} else {
+			const auto divisor = GetAverageDivident<long double>(state.count, finalize_data.input.bind_data);
+			const auto dividend = Hugeint::Cast<long double>(state.value) * Interval::MICROS_PER_DAY;
+			target = T(dividend / divisor);
+		}
+	}
+};
+
+// Averaging TIMETZ is really a matter for theologians,
+// so we just average the time components to produce a TIME.
+struct AddToTimeTZ {
+	template <class STATE, class T>
+	static void AddNumber(STATE &state, T input) {
+		AddToHugeint::AddNumber(state, dtime_tz_t::decode_micros(input));
+	}
+	template <class STATE, class T>
+	static void AddConstant(STATE &state, T input, idx_t count) {
+		AddToHugeint::AddConstant(state, dtime_tz_t::decode_micros(input), count);
+	}
+};
+
+struct IntegerAverageOperationTimeTZ : public BaseSumOperation<AverageSetOperation, AddToTimeTZ> {
+	template <class T, class STATE>
+	static void Finalize(STATE &state, T &target, AggregateFinalizeData &finalize_data) {
+		if (state.count == 0) {
+			finalize_data.ReturnNull();
+		} else {
+			const auto divisor = GetAverageDivident<long double>(state.count, finalize_data.input.bind_data);
+			const auto dividend = Hugeint::Cast<long double>(state.value);
+			target = T(dividend / divisor);
 		}
 	}
 };
@@ -112,7 +152,7 @@ struct HugeintAverageOperation : public BaseSumOperation<AverageSetOperation, Hu
 			finalize_data.ReturnNull();
 		} else {
 			long double divident = GetAverageDivident<long double>(state.count, finalize_data.input.bind_data);
-			target = Hugeint::Cast<long double>(state.value) / divident;
+			target = T(Hugeint::Cast<long double>(state.value) / divident);
 		}
 	}
 };
@@ -141,6 +181,10 @@ struct KahanAverageOperation : public BaseSumOperation<AverageSetOperation, Kaha
 
 AggregateFunction GetAverageAggregate(PhysicalType type) {
 	switch (type) {
+	case PhysicalType::INT8: {
+		return AggregateFunction::UnaryAggregate<AvgState<int64_t>, int8_t, double, IntegerAverageOperation>(
+		    LogicalType::TINYINT, LogicalType::DOUBLE);
+	}
 	case PhysicalType::INT16: {
 		return AggregateFunction::UnaryAggregate<AvgState<int64_t>, int16_t, double, IntegerAverageOperation>(
 		    LogicalType::SMALLINT, LogicalType::DOUBLE);
@@ -162,10 +206,36 @@ AggregateFunction GetAverageAggregate(PhysicalType type) {
 	}
 }
 
+AggregateFunction GetAverageAggregate(const LogicalType &type) {
+	switch (type.id()) {
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::INTEGER:
+	case LogicalTypeId::BIGINT:
+	case LogicalTypeId::HUGEINT:
+	case LogicalTypeId::DECIMAL:
+		return GetAverageAggregate(type.InternalType());
+		break;
+	case LogicalTypeId::DATE:
+		return AggregateFunction::UnaryAggregate<AvgState<hugeint_t>, int32_t, int64_t, IntegerAverageOperationDate>(
+		    type, LogicalTypeId::TIMESTAMP);
+	case LogicalTypeId::TIME_TZ:
+		return AggregateFunction::UnaryAggregate<AvgState<hugeint_t>, uint64_t, int64_t, IntegerAverageOperationTimeTZ>(
+		    type, LogicalTypeId::TIME);
+	case LogicalTypeId::TIME:
+	case LogicalTypeId::TIMESTAMP:
+	case LogicalTypeId::TIMESTAMP_TZ:
+		return AggregateFunction::UnaryAggregate<AvgState<hugeint_t>, int64_t, int64_t, IntegerAverageOperationHugeint>(
+		    type, type);
+	default:
+		throw InternalException("Unimplemented average aggregate");
+	}
+}
+
 unique_ptr<FunctionData> BindDecimalAvg(ClientContext &context, AggregateFunction &function,
                                         vector<unique_ptr<Expression>> &arguments) {
 	auto decimal_type = arguments[0]->return_type;
-	function = GetAverageAggregate(decimal_type.InternalType());
+	function = GetAverageAggregate(decimal_type);
 	function.name = "avg";
 	function.arguments[0] = decimal_type;
 	function.return_type = LogicalType::DOUBLE;
@@ -179,12 +249,19 @@ AggregateFunctionSet AvgFun::GetFunctions() {
 	avg.AddFunction(AggregateFunction({LogicalTypeId::DECIMAL}, LogicalTypeId::DECIMAL, nullptr, nullptr, nullptr,
 	                                  nullptr, nullptr, FunctionNullHandling::DEFAULT_NULL_HANDLING, nullptr,
 	                                  BindDecimalAvg));
-	avg.AddFunction(GetAverageAggregate(PhysicalType::INT16));
-	avg.AddFunction(GetAverageAggregate(PhysicalType::INT32));
-	avg.AddFunction(GetAverageAggregate(PhysicalType::INT64));
-	avg.AddFunction(GetAverageAggregate(PhysicalType::INT128));
+	avg.AddFunction(GetAverageAggregate(LogicalType::TINYINT));
+	avg.AddFunction(GetAverageAggregate(LogicalType::SMALLINT));
+	avg.AddFunction(GetAverageAggregate(LogicalType::INTEGER));
+	avg.AddFunction(GetAverageAggregate(LogicalType::BIGINT));
+	avg.AddFunction(GetAverageAggregate(LogicalType::HUGEINT));
 	avg.AddFunction(AggregateFunction::UnaryAggregate<AvgState<double>, double, double, NumericAverageOperation>(
 	    LogicalType::DOUBLE, LogicalType::DOUBLE));
+
+	avg.AddFunction(GetAverageAggregate(LogicalType::DATE));
+	avg.AddFunction(GetAverageAggregate(LogicalType::TIME));
+	avg.AddFunction(GetAverageAggregate(LogicalType::TIME_TZ));
+	avg.AddFunction(GetAverageAggregate(LogicalType::TIMESTAMP));
+	avg.AddFunction(GetAverageAggregate(LogicalType::TIMESTAMP_TZ));
 	return avg;
 }
 
