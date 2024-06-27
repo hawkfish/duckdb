@@ -91,9 +91,6 @@ bool Timestamp::TryConvertTimestampTZ(const char *str, idx_t len, timestamp_t &r
 		return false;
 	}
 	pos += time_pos;
-	if (!Timestamp::TryFromDatetime(date, time, result)) {
-		return false;
-	}
 	if (pos < len) {
 		// skip a "Z" at the end (as per the ISO8601 specs)
 		int hour_offset, minute_offset;
@@ -101,9 +98,22 @@ bool Timestamp::TryConvertTimestampTZ(const char *str, idx_t len, timestamp_t &r
 			pos++;
 			has_offset = true;
 		} else if (Timestamp::TryParseUTCOffset(str, pos, len, hour_offset, minute_offset)) {
+			//	Apply the deltas to the date and time values before combining them
+			//	to avoid overflowing valid times with non-zero offsets.
 			const int64_t delta = hour_offset * Interval::MICROS_PER_HOUR + minute_offset * Interval::MICROS_PER_MINUTE;
-			if (!TrySubtractOperator::Operation(result.value, delta, result.value)) {
-				return false;
+			//	Offset time values are constrained to ±124 hours by parsing, so this cannot overflow
+			time.micros -= delta;
+			for (; time.micros < 0; time.micros += Interval::MICROS_PER_DAY) {
+				//	Previous day
+				if (!TrySubtractOperator::Operation(date.days, 1, date.days)) {
+					return false;
+				}
+			}
+			for (; time.micros >= Interval::MICROS_PER_DAY; time.micros -= Interval::MICROS_PER_DAY) {
+				//	Next day
+				if (!TryAddOperator::Operation(date.days, 1, date.days)) {
+					return false;
+				}
 			}
 			has_offset = true;
 		} else {
@@ -129,6 +139,9 @@ bool Timestamp::TryConvertTimestampTZ(const char *str, idx_t len, timestamp_t &r
 		if (pos < len) {
 			return false;
 		}
+	}
+	if (!Timestamp::TryFromDatetime(date, time, result)) {
+		return false;
 	}
 	return true;
 }
