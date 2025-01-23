@@ -135,6 +135,17 @@ void WindowCustomAggregator::Evaluate(const WindowAggregatorState &gsink, Window
 		gstate_p = gcsink.gcstate->state.data();
 	}
 
+	// Special case unFILTERed COUNT(*) EXCLUDE NO OTHERS to use vectorised version for performance
+	if (exclude_mode == WindowExcludeMode::NO_OTHER && child_idx.empty() && gcsink.filter_packed.AllValid()) {
+		auto begins = FlatVector::GetData<const idx_t>(bounds.data[FRAME_BEGIN]);
+		auto ends = FlatVector::GetData<const idx_t>(bounds.data[FRAME_END]);
+		auto data = FlatVector::GetData<idx_t>(result);
+		for (idx_t i = 0; i < count; ++i) {
+			data[i] = ends[i] - begins[i];
+		}
+		return;
+	}
+
 	EvaluateSubFrames(bounds, exclude_mode, count, row_idx, frames, [&](idx_t i) {
 		// Extract the range
 		AggregateInputData aggr_input_data(aggr.GetFunctionData(), lstate.allocator);

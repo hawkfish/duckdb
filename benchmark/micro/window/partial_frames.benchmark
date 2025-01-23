@@ -1,0 +1,21 @@
+# name: benchmark/micro/window/partial_frames.benchmark
+# description: Partial Frames NULL performance
+# group: [window]
+
+load
+SELECT SETSEED(0.8675309);
+CREATE OR REPLACE TABLE results AS 
+	SELECT ROUND(random() * 20, 0)::TINYINT AS points
+	FROM range(10_000_000);
+
+run
+WITH variable AS (
+	SELECT points,
+		SUM(points) OVER w AS we,
+		COUNT(*) OVER w as n,
+	FROM results
+	WINDOW w AS (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+)
+SELECT points,
+	IF(n < 3, NULL, we) AS we,
+FROM variable
