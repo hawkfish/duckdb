@@ -5,7 +5,6 @@
 #include "duckdb/execution/operator/aggregate/physical_ungrouped_aggregate.hpp"
 #include "duckdb/execution/operator/aggregate/physical_partitioned_aggregate.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
-#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -54,7 +53,7 @@ static bool CanUsePartitionedAggregate(ClientContext &context, LogicalAggregate 
 	}
 	// traverse the children of the aggregate to find the source operator
 	reference<PhysicalOperator> child_ref(child);
-	while (child_ref.get().type != PhysicalOperatorType::TABLE_SCAN) {
+	while (!child_ref.get().ExposesPartitionInfo()) {
 		auto &child_op = child_ref.get();
 		switch (child_op.type) {
 		case PhysicalOperatorType::PROJECTION: {
@@ -84,26 +83,8 @@ static bool CanUsePartitionedAggregate(ClientContext &context, LogicalAggregate 
 			return false;
 		}
 	}
-	auto &table_scan = child_ref.get().Cast<PhysicalTableScan>();
-	if (!table_scan.function.get_partition_info) {
-		// this source does not expose partition information - skip
-		return false;
-	}
-	// get the base columns by projecting over the projection_ids/column_ids
-	if (!table_scan.projection_ids.empty()) {
-		for (auto &partition_col : partition_columns) {
-			partition_col = table_scan.projection_ids[partition_col];
-		}
-	}
-	vector<column_t> base_columns;
-	for (const auto &partition_idx : partition_columns) {
-		auto col_idx = partition_idx;
-		col_idx = table_scan.column_ids[col_idx].GetPrimaryIndex();
-		base_columns.push_back(col_idx);
-	}
 	// check if the source operator is partitioned by the grouping columns
-	TableFunctionPartitionInput input(table_scan.bind_data.get(), base_columns);
-	auto partition_info = table_scan.function.get_partition_info(context, input);
+	auto partition_info = child_ref.get().GetPartitionColumns(context, partition_columns);
 	if (partition_info != TablePartitionInfo::SINGLE_VALUE_PARTITIONS) {
 		// we only support single-value partitions currently
 		return false;

@@ -75,6 +75,29 @@ public:
 
 	bool SupportsPartitioning(const OperatorPartitionInfo &partition_info) const override;
 
+	bool ExposesPartitionInfo() const override {
+		return function.get_partition_info;
+	}
+	TablePartitionInfo GetPartitionColumns(ClientContext &context, vector<column_t> &partition_columns) const override {
+		if (!function.get_partition_info) {
+			return PhysicalOperator::GetPartitionColumns(context, partition_columns);
+		}
+		// get the base columns by projecting over the projection_ids/column_ids
+		if (!projection_ids.empty()) {
+			for (auto &partition_col : partition_columns) {
+				partition_col = projection_ids[partition_col];
+			}
+		}
+		vector<column_t> base_columns;
+		for (const auto &partition_idx : partition_columns) {
+			auto col_idx = partition_idx;
+			col_idx = column_ids[col_idx].GetPrimaryIndex();
+			base_columns.push_back(col_idx);
+		}
+		TableFunctionPartitionInput input(bind_data.get(), base_columns);
+		return function.get_partition_info(context, input);
+	}
+
 	ProgressData GetProgress(ClientContext &context, GlobalSourceState &gstate) const override;
 
 	InsertionOrderPreservingMap<string> ExtraSourceParams(GlobalSourceState &gstate,

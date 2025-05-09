@@ -16,6 +16,7 @@
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/execution/progress_data.hpp"
+#include "duckdb/function/partition_stats.hpp"
 #include "duckdb/optimizer/join_order/join_node.hpp"
 #include "duckdb/common/optional_idx.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
@@ -141,6 +142,14 @@ public:
 	//! The type of order emitted by the operator (as a source)
 	virtual OrderPreservationType SourceOrder() const {
 		return OrderPreservationType::INSERTION_ORDER;
+	}
+
+	virtual bool ExposesPartitionInfo() const {
+		return false;
+	}
+
+	virtual TablePartitionInfo GetPartitionColumns(ClientContext &context, vector<column_t> &partition_columns) const {
+		return TablePartitionInfo::NOT_PARTITIONED;
 	}
 
 	//! Returns the current progress percentage, or a negative value if progress bars are not supported
