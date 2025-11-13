@@ -52,9 +52,11 @@ static BoundWindowExpression &SimplifyWindowedAggregate(BoundWindowExpression &w
 WindowAggregateExecutor::WindowAggregateExecutor(BoundWindowExpression &wexpr, ClientContext &client,
                                                  WindowSharedExpressions &shared, WindowAggregationMode mode)
     : WindowExecutor(SimplifyWindowedAggregate(wexpr, client), shared), mode(mode) {
-
 	// Force naive for SEPARATE mode or for (currently!) unsupported functionality
 	if (!ClientConfig::GetConfig(client).enable_optimizer || mode == WindowAggregationMode::SEPARATE) {
+		if (!WindowNaiveAggregator::CanAggregate(wexpr)) {
+			throw InvalidInputException("Cannot use non-aggregate window function with naive window executor!");
+		}
 		aggregator = make_uniq<WindowNaiveAggregator>(*this, shared);
 	} else if (WindowDistinctAggregator::CanAggregate(wexpr)) {
 		// build a merge sort tree
@@ -68,9 +70,14 @@ WindowAggregateExecutor::WindowAggregateExecutor(BoundWindowExpression &wexpr, C
 		// build a segment tree for frame-adhering aggregates
 		// see http://www.vldb.org/pvldb/vol8/p1058-leis.pdf
 		aggregator = make_uniq<WindowSegmentTree>(wexpr, shared);
-	} else {
+	} else if (WindowNaiveAggregator::CanAggregate(wexpr)) {
 		// No accelerator can handle this combination, so fall back to naïve.
 		aggregator = make_uniq<WindowNaiveAggregator>(*this, shared);
+	} else {
+		// This shouldn't happen, if we get here, the binder messed up
+		// Non-aggregate window functions that can't be handled by the WindowCustomAggregator due to e.g. a ORDER BY
+		// clause should have been caught in the binder.
+		throw InternalException("Could not create a window aggregator with the given parameters!");
 	}
 
 	// Compute the FILTER with the other eval columns.
@@ -103,7 +110,6 @@ public:
 	                                  const WindowAggregator &aggregator)
 	    : WindowExecutorBoundsLocalState(context, gstate.Cast<WindowAggregateExecutorGlobalState>()),
 	      filter_executor(context.client) {
-
 		auto &gastate = gstate.Cast<WindowAggregateExecutorGlobalState>();
 		aggregator_state = aggregator.GetLocalState(context, *gastate.gsink);
 

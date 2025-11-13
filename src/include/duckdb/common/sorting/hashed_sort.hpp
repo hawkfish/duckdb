@@ -12,37 +12,12 @@
 
 namespace duckdb {
 
-// Formerly PartitionGlobalHashGroup
-class HashedSortGroup {
-public:
-	using Orders = vector<BoundOrderByNode>;
-	using Types = vector<LogicalType>;
-
-	HashedSortGroup(ClientContext &client, optional_ptr<Sort> sort, idx_t group_idx);
-
-	const idx_t group_idx;
-
-	//	Sink
-	optional_ptr<Sort> sort;
-	unique_ptr<GlobalSinkState> sort_global;
-
-	//	Source
-	atomic<idx_t> tasks_completed;
-	unique_ptr<GlobalSourceState> sort_source;
-	unique_ptr<ColumnDataCollection> sorted;
-};
-
-class HashedSortCallback {
-public:
-	virtual ~HashedSortCallback() = default;
-	virtual void OnSortedGroup(HashedSortGroup &hash_group) const = 0;
-};
-
 class HashedSort {
 public:
 	using Orders = vector<BoundOrderByNode>;
 	using Types = vector<LogicalType>;
-	using HashGroupPtr = unique_ptr<HashedSortGroup>;
+	using HashGroupPtr = unique_ptr<ColumnDataCollection>;
+	using SortedRunPtr = unique_ptr<SortedRun>;
 
 	static void GenerateOrderings(Orders &partitions, Orders &orders,
 	                              const vector<unique_ptr<Expression>> &partition_bys, const Orders &order_bys,
@@ -51,7 +26,7 @@ public:
 	HashedSort(ClientContext &context, const vector<unique_ptr<Expression>> &partition_bys,
 	           const vector<BoundOrderByNode> &order_bys, const Types &payload_types,
 	           const vector<unique_ptr<BaseStatistics>> &partitions_stats, idx_t estimated_cardinality,
-	           optional_ptr<HashedSortCallback> callback);
+	           bool require_payload = false);
 
 public:
 	//===--------------------------------------------------------------------===//
@@ -62,14 +37,37 @@ public:
 	SinkResultType Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const;
 	SinkCombineResultType Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const;
 	SinkFinalizeType Finalize(ClientContext &client, OperatorSinkFinalizeInput &finalize) const;
+	ProgressData GetSinkProgress(ClientContext &context, GlobalSinkState &gstate,
+	                             const ProgressData source_progress) const;
+	void Synchronize(const GlobalSinkState &source, GlobalSinkState &target) const;
+
+public:
+	//===--------------------------------------------------------------------===//
+	// Source Interface
+	//===--------------------------------------------------------------------===//
+	unique_ptr<LocalSourceState> GetLocalSourceState(ExecutionContext &context, GlobalSourceState &gstate) const;
+	unique_ptr<GlobalSourceState> GetGlobalSourceState(ClientContext &context, GlobalSinkState &sink) const;
 
 public:
 	//===--------------------------------------------------------------------===//
 	// Non-Standard Interface
 	//===--------------------------------------------------------------------===//
-	SinkFinalizeType MaterializeHashGroups(Pipeline &pipeline, Event &event, const PhysicalOperator &op,
-	                                       OperatorSinkFinalizeInput &finalize) const;
-	vector<HashGroupPtr> &GetHashGroups(GlobalSinkState &global_state) const;
+	void SortColumnData(ExecutionContext &context, hash_t hash_bin, OperatorSinkFinalizeInput &finalize);
+
+	SourceResultType MaterializeColumnData(ExecutionContext &context, idx_t hash_bin,
+	                                       OperatorSourceInput &source) const;
+	HashGroupPtr GetColumnData(idx_t hash_bin, OperatorSourceInput &source) const;
+
+	SourceResultType MaterializeSortedRun(ExecutionContext &context, idx_t hash_bin, OperatorSourceInput &source) const;
+	SortedRunPtr GetSortedRun(ClientContext &client, idx_t hash_bin, OperatorSourceInput &source) const;
+
+	// The chunk and row counts of the hash groups.
+	struct ChunkRow {
+		idx_t chunks = 0;
+		idx_t count = 0;
+	};
+	using ChunkRows = vector<ChunkRow>;
+	const ChunkRows &GetHashGroups(GlobalSourceState &global_state) const;
 
 public:
 	ClientContext &client;
@@ -81,6 +79,8 @@ public:
 	Orders orders;
 	idx_t sort_col_count;
 	Types payload_types;
+	//! Are we creating a dummy payload column?
+	bool force_payload = false;
 	// Input columns in the sorted output
 	vector<column_t> scan_ids;
 	// Key columns in the sorted output
@@ -89,8 +89,6 @@ public:
 	vector<unique_ptr<Expression>> sort_exprs;
 	//! Common sort description
 	unique_ptr<Sort> sort;
-	//! Sorting callback for completed groups
-	mutable optional_ptr<HashedSortCallback> callback;
 };
 
 } // namespace duckdb

@@ -8,8 +8,7 @@
 
 namespace duckdb {
 
-unique_ptr<MultiFileReaderInterface>
-CSVMultiFileInfo::InitializeInterface(ClientContext &context, MultiFileReader &reader, MultiFileList &file_list) {
+unique_ptr<MultiFileReaderInterface> CSVMultiFileInfo::CreateInterface(ClientContext &context) {
 	return make_uniq<CSVMultiFileInfo>();
 }
 
@@ -366,13 +365,15 @@ bool CSVFileScan::TryInitializeScan(ClientContext &context, GlobalTableFunctionS
 	return true;
 }
 
-void CSVFileScan::Scan(ClientContext &context, GlobalTableFunctionState &global_state,
-                       LocalTableFunctionState &local_state, DataChunk &chunk) {
+AsyncResult CSVFileScan::Scan(ClientContext &context, GlobalTableFunctionState &global_state,
+                              LocalTableFunctionState &local_state, DataChunk &chunk) {
 	auto &lstate = local_state.Cast<CSVLocalState>();
 	if (lstate.csv_reader->FinishedIterator()) {
-		return;
+		return AsyncResult(SourceResultType::FINISHED);
 	}
 	lstate.csv_reader->Flush(chunk);
+	return chunk.size() == 0 ? AsyncResult(SourceResultType::FINISHED)
+	                         : AsyncResult(SourceResultType::HAVE_MORE_OUTPUT);
 }
 
 void CSVFileScan::FinishFile(ClientContext &context, GlobalTableFunctionState &global_state) {
@@ -415,6 +416,10 @@ double CSVFileScan::GetProgressInFile(ClientContext &context) {
 	}
 	double file_progress = total_bytes_read / static_cast<double>(file_size);
 	return file_progress * 100.0;
+}
+
+FileGlobInput CSVMultiFileInfo::GetGlobInput() {
+	return FileGlobInput(FileGlobOptions::FALLBACK_GLOB, "csv");
 }
 
 } // namespace duckdb

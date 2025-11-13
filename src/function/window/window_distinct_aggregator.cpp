@@ -22,6 +22,10 @@ bool WindowDistinctAggregator::CanAggregate(const BoundWindowExpression &wexpr) 
 		return false;
 	}
 
+	if (!wexpr.aggregate->CanAggregate()) {
+		return false;
+	}
+
 	return wexpr.distinct && wexpr.exclude_clause == WindowExcludeMode::NO_OTHER && wexpr.arg_orders.empty();
 }
 
@@ -120,7 +124,6 @@ WindowDistinctAggregatorGlobalState::WindowDistinctAggregatorGlobalState(ClientC
                                                                          idx_t group_count)
     : WindowAggregatorGlobalState(client, aggregator, group_count), stage(WindowDistinctSortStage::INIT),
       tasks_assigned(0), tasks_completed(0), merge_sort_tree(*this, group_count), levels_flat_native(aggr) {
-
 	//	1:	functionComputePrevIdcs(𝑖𝑛)
 	//	2:		sorted ← []
 	//	We sort the aggregate arguments and use the partition index as a tie-breaker.
@@ -700,7 +703,6 @@ unique_ptr<LocalSinkState> WindowDistinctAggregator::GetLocalState(ExecutionCont
 
 void WindowDistinctAggregator::Evaluate(ExecutionContext &context, const DataChunk &bounds, Vector &result, idx_t count,
                                         idx_t row_idx, OperatorSinkInput &sink) const {
-
 	const auto &gdstate = sink.global_state.Cast<WindowDistinctAggregatorGlobalState>();
 	auto &ldstate = sink.local_state.Cast<WindowDistinctAggregatorLocalState>();
 	ldstate.Evaluate(context, gdstate, bounds, result, count, row_idx);

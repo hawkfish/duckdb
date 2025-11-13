@@ -12,6 +12,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
 #include "duckdb/parser/statement/copy_statement.hpp"
+#include "duckdb/common/enums/copy_option_mode.hpp"
 
 namespace duckdb {
 
@@ -21,6 +22,21 @@ class Binder;
 class ColumnDataCollection;
 class ExecutionContext;
 class PhysicalOperatorLogger;
+
+struct CopyFunctionInfo {
+	virtual ~CopyFunctionInfo() = default;
+
+	template <class TARGET>
+	TARGET &Cast() {
+		DynamicCastCheck<TARGET>(this);
+		return reinterpret_cast<TARGET &>(*this);
+	}
+	template <class TARGET>
+	const TARGET &Cast() const {
+		DynamicCastCheck<TARGET>(this);
+		return reinterpret_cast<const TARGET &>(*this);
+	}
+};
 
 struct LocalFunctionData {
 	virtual ~LocalFunctionData() = default;
@@ -68,11 +84,12 @@ struct PreparedBatchData {
 };
 
 struct CopyFunctionBindInput {
-	explicit CopyFunctionBindInput(const CopyInfo &info_p) : info(info_p) {
+	explicit CopyFunctionBindInput(const CopyInfo &info_p, shared_ptr<CopyFunctionInfo> function_info = nullptr)
+	    : info(info_p), function_info(std::move(function_info)) {
 	}
 
 	const CopyInfo &info;
-
+	shared_ptr<CopyFunctionInfo> function_info;
 	string file_extension;
 };
 
@@ -91,9 +108,25 @@ struct CopyToSelectInput {
 	CopyToType copy_to_type;
 };
 
+struct CopyOption {
+	CopyOption();
+	explicit CopyOption(LogicalType type_p, CopyOptionMode mode = CopyOptionMode::READ_WRITE);
+
+	LogicalType type;
+	CopyOptionMode mode;
+};
+
+struct CopyOptionsInput {
+	explicit CopyOptionsInput(case_insensitive_map_t<CopyOption> &options) : options(options) {
+	}
+
+	case_insensitive_map_t<CopyOption> &options;
+};
+
 enum class CopyFunctionExecutionMode { REGULAR_COPY_TO_FILE, PARALLEL_COPY_TO_FILE, BATCH_COPY_TO_FILE };
 
 typedef BoundStatement (*copy_to_plan_t)(Binder &binder, CopyStatement &stmt);
+typedef void (*copy_options_t)(ClientContext &context, CopyOptionsInput &input);
 typedef unique_ptr<FunctionData> (*copy_to_bind_t)(ClientContext &context, CopyFunctionBindInput &input,
                                                    const vector<string> &names, const vector<LogicalType> &sql_types);
 typedef unique_ptr<LocalFunctionData> (*copy_to_initialize_local_t)(ExecutionContext &context, FunctionData &bind_data);
@@ -152,20 +185,13 @@ struct CopyFunctionFileStatistics {
 
 class CopyFunction : public Function { // NOLINT: work-around bug in clang-tidy
 public:
-	explicit CopyFunction(const string &name)
-	    : Function(name), plan(nullptr), copy_to_select(nullptr), copy_to_bind(nullptr),
-	      copy_to_initialize_local(nullptr), copy_to_initialize_global(nullptr),
-	      copy_to_get_written_statistics(nullptr), copy_to_sink(nullptr), copy_to_combine(nullptr),
-	      copy_to_finalize(nullptr), execution_mode(nullptr), initialize_operator(nullptr), prepare_batch(nullptr),
-	      flush_batch(nullptr), desired_batch_size(nullptr), rotate_files(nullptr), rotate_next_file(nullptr),
-	      serialize(nullptr), deserialize(nullptr), copy_from_bind(nullptr) {
-	}
+	explicit CopyFunction(const string &name);
 
 	//! Plan rewrite copy function
 	copy_to_plan_t plan;
-
 	copy_to_select_t copy_to_select;
 	copy_to_bind_t copy_to_bind;
+	copy_options_t copy_options;
 	copy_to_initialize_local_t copy_to_initialize_local;
 	copy_to_initialize_global_t copy_to_initialize_global;
 	copy_to_get_written_statistics_t copy_to_get_written_statistics;
@@ -189,6 +215,9 @@ public:
 	TableFunction copy_from_function;
 
 	string extension;
+
+	//! Additional function info, passed to the bind
+	shared_ptr<CopyFunctionInfo> function_info;
 };
 
 } // namespace duckdb

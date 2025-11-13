@@ -13,7 +13,6 @@ namespace duckdb {
 //===--------------------------------------------------------------------===//
 WindowNaiveAggregator::WindowNaiveAggregator(const WindowAggregateExecutor &executor, WindowSharedExpressions &shared)
     : WindowAggregator(executor.wexpr, shared), executor(executor) {
-
 	for (const auto &order : wexpr.arg_orders) {
 		arg_order_idx.emplace_back(shared.RegisterCollection(order.expression, false));
 	}
@@ -370,6 +369,13 @@ void WindowNaiveAggregator::Evaluate(ExecutionContext &context, const DataChunk 
 	const auto &gnstate = sink.global_state.Cast<WindowAggregatorGlobalState>();
 	auto &lnstate = sink.local_state.Cast<WindowNaiveLocalState>();
 	lnstate.Evaluate(context, gnstate, bounds, result, count, row_idx, sink.interrupt_state);
+}
+
+bool WindowNaiveAggregator::CanAggregate(const BoundWindowExpression &wexpr) {
+	if (!wexpr.aggregate || !wexpr.aggregate->CanAggregate()) {
+		return false;
+	}
+	return true;
 }
 
 } // namespace duckdb
