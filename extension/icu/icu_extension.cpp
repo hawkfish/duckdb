@@ -236,7 +236,6 @@ static string NormalizeTimeZone(const string &tz_str) {
 		auto sign = utc;
 		if (utc == '+') {
 			sign = '-';
-			;
 		} else if (utc == '-') {
 			sign = '+';
 		} else {
