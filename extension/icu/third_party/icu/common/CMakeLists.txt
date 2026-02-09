@@ -1,4 +1,4 @@
-add_library(
+add_library_unity(
   duckdb_icu_common
   OBJECT
   appendable.cpp
@@ -6,7 +6,6 @@ add_library(
   bytesinkutil.cpp
   bytestream.cpp
   bytestrie.cpp
-  bytestriebuilder.cpp
   bytestrieiterator.cpp
   caniter.cpp
   characterproperties.cpp
@@ -28,11 +27,9 @@ add_library(
   locavailable.cpp
   locbased.cpp
   locdispnames.cpp
-  locdistance.cpp
   locdspnm.cpp
   locid.cpp
   loclikely.cpp
-  loclikelysubtags.cpp
   locresdata.cpp
   lsr.cpp
   messagepattern.cpp
@@ -51,21 +48,16 @@ add_library(
   schriter.cpp
   sharedobject.cpp
   simpleformatter.cpp
-  static_unicode_sets.cpp
   stringpiece.cpp
   stringtriebuilder.cpp
   uarrsort.cpp
   ubidi.cpp
-  ubidi_props.cpp
   ubidiln.cpp
-  ubiditransform.cpp
   ubidiwrt.cpp
-  ucase.cpp
   ucasemap.cpp
   ucat.cpp
   uchar.cpp
   ucharstrie.cpp
-  ucharstriebuilder.cpp
   ucharstrieiterator.cpp
   uchriter.cpp
   ucln_cmn.cpp
@@ -77,7 +69,6 @@ add_library(
   udatamem.cpp
   udataswp.cpp
   uenum.cpp
-  uhash.cpp
   uhash_us.cpp
   uinit.cpp
   uinvchar.cpp
@@ -87,10 +78,8 @@ add_library(
   uloc_keytype.cpp
   uloc_tag.cpp
   umath.cpp
-  umutablecptrie.cpp
   umutex.cpp
   unames.cpp
-  unifiedcache.cpp
   unifilt.cpp
   unifunct.cpp
   uniset.cpp
@@ -102,36 +91,26 @@ add_library(
   unistr_case_locale.cpp
   unistr_props.cpp
   unorm.cpp
-  unormcmp.cpp
   uobject.cpp
   uprops.cpp
   ures_cnv.cpp
-  uresbund.cpp
-  uresdata.cpp
   usc_impl.cpp
   uscript.cpp
-  uscript_props.cpp
   uset.cpp
   uset_props.cpp
   usetiter.cpp
   ushape.cpp
   ustack.cpp
   ustr_wcs.cpp
-  ustrcase.cpp
   ustrcase_locale.cpp
   ustrenum.cpp
   ustrfmt.cpp
   ustring.cpp
   ustrtrns.cpp
-  utext.cpp
   utf_impl.cpp
   util.cpp
   util_props.cpp
   utrace.cpp
-  utrie.cpp
-  utrie2.cpp
-  utrie2_builder.cpp
-  utrie_swap.cpp
   utypes.cpp
   uvector.cpp
   uvectr32.cpp
@@ -141,6 +120,32 @@ add_library(
   umapfile.cpp
   wintz.cpp)
 disable_target_warnings(duckdb_icu_common)
+add_library(
+  duckdb_icu_common1
+  OBJECT
+  bytestriebuilder.cpp
+  locdistance.cpp
+  loclikelysubtags.cpp
+  static_unicode_sets.cpp
+  ubidi_props.cpp
+  ubiditransform.cpp
+  ucase.cpp
+  ucharstriebuilder.cpp
+  uhash.cpp
+  umutablecptrie.cpp
+  unifiedcache.cpp
+  unormcmp.cpp
+  uresbund.cpp
+  uresdata.cpp
+  uscript_props.cpp
+  ustrcase.cpp
+  utext.cpp
+  utrie.cpp
+  utrie2.cpp
+  utrie2_builder.cpp
+  utrie_swap.cpp
+  uvector.cpp)
+disable_target_warnings(duckdb_icu_common1)
 set(ICU_LIBRARY_FILES
-    ${ICU_LIBRARY_FILES} $<TARGET_OBJECTS:duckdb_icu_common>
+    ${ICU_LIBRARY_FILES} $<TARGET_OBJECTS:duckdb_icu_common>  $<TARGET_OBJECTS:duckdb_icu_common1>
     PARENT_SCOPE)

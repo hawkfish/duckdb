@@ -1,15 +1,12 @@
-add_library(
+add_library_unity(
   duckdb_icu_i18n
   OBJECT
   alphaindex.cpp
   astro.cpp
   basictz.cpp
   bocsu.cpp
-  buddhcal.cpp
   calendar.cpp
   cecal.cpp
-  chnsecal.cpp
-  choicfmt.cpp
   coleitr.cpp
   coll.cpp
   collation.cpp
@@ -17,14 +14,12 @@ add_library(
   collationcompare.cpp
   collationdata.cpp
   collationdatabuilder.cpp
-  collationdatareader.cpp
   collationdatawriter.cpp
   collationfastlatin.cpp
   collationfastlatinbuilder.cpp
   collationfcd.cpp
   collationiterator.cpp
   collationkeys.cpp
-  collationroot.cpp
   collationrootelements.cpp
   collationruleparser.cpp
   collationsets.cpp
@@ -32,18 +27,13 @@ add_library(
   collationtailoring.cpp
   collationweights.cpp
   compactdecimalformat.cpp
-  coptccal.cpp
   curramt.cpp
   currfmt.cpp
-  currpinf.cpp
   currunit.cpp
   dangical.cpp
   datefmt.cpp
-  dayperiodrules.cpp
   dcfmtsym.cpp
   decContext.cpp
-  decNumber.cpp
-  decimfmt.cpp
   displayoptions.cpp
   double-conversion-bignum-dtoa.cpp
   double-conversion-bignum.cpp
@@ -52,13 +42,9 @@ add_library(
   double-conversion-fast-dtoa.cpp
   double-conversion-string-to-double.cpp
   double-conversion-strtod.cpp
-  dtfmtsym.cpp
-  dtitvfmt.cpp
-  dtitvinf.cpp
   dtptngen.cpp
   dtrule.cpp
   erarules.cpp
-  ethpccal.cpp
   fmtable.cpp
   format.cpp
   formatted_string_builder.cpp
@@ -68,69 +54,41 @@ add_library(
   fphdlimp.cpp
   fpositer.cpp
   gender.cpp
-  gregocal.cpp
   gregoimp.cpp
-  hebrwcal.cpp
-  indiancal.cpp
-  islamcal.cpp
   iso8601cal.cpp
   listformatter.cpp
   measfmt.cpp
   measunit.cpp
   measunit_extra.cpp
   measure.cpp
-  msgfmt.cpp
-  nfrs.cpp
-  nfrule.cpp
   nfsubs.cpp
   number_affixutils.cpp
   number_asformat.cpp
   number_capi.cpp
-  number_compact.cpp
   number_currencysymbols.cpp
   number_decimalquantity.cpp
   number_decimfmtprops.cpp
-  number_fluent.cpp
   number_formatimpl.cpp
   number_grouping.cpp
   number_integerwidth.cpp
-  number_longnames.cpp
-  number_mapper.cpp
   number_modifiers.cpp
   number_multiplier.cpp
   number_notation.cpp
   number_output.cpp
   number_padding.cpp
   number_patternmodifier.cpp
-  number_patternstring.cpp
   number_rounding.cpp
   number_scientific.cpp
   number_simple.cpp
-  number_skeletons.cpp
   number_symbolswrapper.cpp
   number_usageprefs.cpp
   number_utils.cpp
   numfmt.cpp
-  numparse_affixes.cpp
-  numparse_compositions.cpp
-  numparse_currency.cpp
-  numparse_decimal.cpp
-  numparse_impl.cpp
   numparse_parsednumber.cpp
-  numparse_scientific.cpp
-  numparse_symbols.cpp
-  numparse_validators.cpp
-  numrange_capi.cpp
-  numrange_fluent.cpp
-  numrange_impl.cpp
-  numsys.cpp
   olsontz.cpp
-  persncal.cpp
   pluralranges.cpp
   plurfmt.cpp
-  plurrule.cpp
   quantityformatter.cpp
-  rbnf.cpp
   rbtz.cpp
   region.cpp
   reldtfmt.cpp
@@ -138,26 +96,16 @@ add_library(
   scientificnumberformatter.cpp
   selfmt.cpp
   simpletz.cpp
-  smpdtfmt.cpp
   smpdtfst.cpp
   sortkey.cpp
-  standardplural.cpp
   string_segment.cpp
-  taiwncal.cpp
-  timezone.cpp
   tmunit.cpp
   tmutamt.cpp
-  tmutfmt.cpp
-  tzfmt.cpp
-  tzgnames.cpp
   tznames.cpp
-  tznames_impl.cpp
   tzrule.cpp
   tztrans.cpp
-  ucal.cpp
   ucln_in.cpp
   ucol.cpp
-  ucol_res.cpp
   ucol_sit.cpp
   ucoleitr.cpp
   udat.cpp
@@ -179,17 +127,72 @@ add_library(
   utf16collationiterator.cpp
   utf8collationiterator.cpp
   utmscale.cpp
-  vtzone.cpp
   vzone.cpp
   zonemeta.cpp
   zrule.cpp
   ztrans.cpp
-  japancal.cpp
   windtfmt.cpp
   winnmfmt.cpp
-  wintzimpl.cpp
-)
+  wintzimpl.cpp)
 disable_target_warnings(duckdb_icu_i18n)
+add_library(
+  duckdb_icu_i18n1
+  OBJECT
+  buddhcal.cpp
+  chnsecal.cpp
+  choicfmt.cpp
+  collationdatareader.cpp
+  collationroot.cpp
+  coptccal.cpp
+  currpinf.cpp
+  dayperiodrules.cpp
+  decimfmt.cpp
+  decNumber.cpp
+  dtfmtsym.cpp
+  dtitvfmt.cpp
+  dtitvinf.cpp
+  ethpccal.cpp
+  gregocal.cpp
+  hebrwcal.cpp
+  indiancal.cpp
+  islamcal.cpp
+  japancal.cpp
+  msgfmt.cpp
+  nfrs.cpp
+  nfrule.cpp
+  number_compact.cpp
+  number_fluent.cpp
+  number_longnames.cpp
+  number_mapper.cpp
+  number_patternstring.cpp
+  number_skeletons.cpp
+  numparse_affixes.cpp
+  numparse_compositions.cpp
+  numparse_currency.cpp
+  numparse_decimal.cpp
+  numparse_impl.cpp
+  numparse_scientific.cpp
+  numparse_symbols.cpp
+  numparse_validators.cpp
+  numrange_capi.cpp
+  numrange_fluent.cpp
+  numrange_impl.cpp
+  numsys.cpp
+  persncal.cpp
+  plurrule.cpp
+  rbnf.cpp
+  smpdtfmt.cpp
+  standardplural.cpp
+  taiwncal.cpp
+  timezone.cpp
+  tmutfmt.cpp
+  tzgnames.cpp
+  tznames_impl.cpp
+  tzfmt.cpp
+  ucal.cpp
+  ucol_res.cpp
+  vtzone.cpp)
+disable_target_warnings(duckdb_icu_i18n1)
 set(ICU_LIBRARY_FILES
-    ${ICU_LIBRARY_FILES} $<TARGET_OBJECTS:duckdb_icu_i18n>
+    ${ICU_LIBRARY_FILES} $<TARGET_OBJECTS:duckdb_icu_i18n> $<TARGET_OBJECTS:duckdb_icu_i18n1>
     PARENT_SCOPE)
