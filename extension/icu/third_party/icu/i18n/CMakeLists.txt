@@ -6,7 +6,6 @@ add_library_unity(
   basictz.cpp
   bocsu.cpp
   calendar.cpp
-  cecal.cpp
   coleitr.cpp
   coll.cpp
   collation.cpp
@@ -139,6 +138,7 @@ add_library(
   duckdb_icu_i18n1
   OBJECT
   buddhcal.cpp
+  cecal.cpp
   chnsecal.cpp
   choicfmt.cpp
   collationdatareader.cpp

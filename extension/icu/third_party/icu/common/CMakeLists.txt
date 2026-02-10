@@ -2,7 +2,6 @@ add_library_unity(
   duckdb_icu_common
   OBJECT
   appendable.cpp
-  bmpset.cpp
   bytesinkutil.cpp
   bytestream.cpp
   bytestrie.cpp
@@ -20,7 +19,6 @@ add_library_unity(
   errorcode.cpp
   filterednormalizer2.cpp
   icudataver.cpp
-  loadednormalizer2impl.cpp
   localebuilder.cpp
   localematcher.cpp
   localeprioritylist.cpp
@@ -56,15 +54,12 @@ add_library_unity(
   ubidiwrt.cpp
   ucasemap.cpp
   ucat.cpp
-  uchar.cpp
   ucharstrie.cpp
   ucharstrieiterator.cpp
   uchriter.cpp
   ucln_cmn.cpp
   ucmndata.cpp
   ucol_swp.cpp
-  ucptrie.cpp
-  ucurr.cpp
   udata.cpp
   udatamem.cpp
   udataswp.cpp
@@ -82,9 +77,6 @@ add_library_unity(
   unames.cpp
   unifilt.cpp
   unifunct.cpp
-  uniset.cpp
-  uniset_closure.cpp
-  uniset_props.cpp
   unisetspan.cpp
   unistr.cpp
   unistr_case.cpp
@@ -108,11 +100,9 @@ add_library_unity(
   ustring.cpp
   ustrtrns.cpp
   utf_impl.cpp
-  util.cpp
   util_props.cpp
   utrace.cpp
   utypes.cpp
-  uvector.cpp
   uvectr32.cpp
   uvectr64.cpp
   locmap.cpp
@@ -123,16 +113,24 @@ disable_target_warnings(duckdb_icu_common)
 add_library(
   duckdb_icu_common1
   OBJECT
+  bmpset.cpp
   bytestriebuilder.cpp
+  loadednormalizer2impl.cpp
   locdistance.cpp
   loclikelysubtags.cpp
   static_unicode_sets.cpp
   ubidi_props.cpp
   ubiditransform.cpp
   ucase.cpp
+  uchar.cpp
   ucharstriebuilder.cpp
+  ucptrie.cpp
+  ucurr.cpp
   uhash.cpp
   umutablecptrie.cpp
+  uniset.cpp
+  uniset_closure.cpp
+  uniset_props.cpp
   unifiedcache.cpp
   unormcmp.cpp
   uresbund.cpp
@@ -140,6 +138,7 @@ add_library(
   uscript_props.cpp
   ustrcase.cpp
   utext.cpp
+  util.cpp
   utrie.cpp
   utrie2.cpp
   utrie2_builder.cpp
