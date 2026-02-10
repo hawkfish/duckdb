@@ -22,11 +22,9 @@ add_library_unity(
   localebuilder.cpp
   localematcher.cpp
   localeprioritylist.cpp
-  locavailable.cpp
   locbased.cpp
   locdispnames.cpp
   locdspnm.cpp
-  locid.cpp
   loclikely.cpp
   locresdata.cpp
   lsr.cpp
@@ -107,8 +105,7 @@ add_library_unity(
   uvectr64.cpp
   locmap.cpp
   putil.cpp
-  umapfile.cpp
-  wintz.cpp)
+  umapfile.cpp)
 disable_target_warnings(duckdb_icu_common)
 add_library(
   duckdb_icu_common1
@@ -116,7 +113,9 @@ add_library(
   bmpset.cpp
   bytestriebuilder.cpp
   loadednormalizer2impl.cpp
+  locavailable.cpp
   locdistance.cpp
+  locid.cpp
   loclikelysubtags.cpp
   static_unicode_sets.cpp
   ubidi_props.cpp
@@ -143,7 +142,8 @@ add_library(
   utrie2.cpp
   utrie2_builder.cpp
   utrie_swap.cpp
-  uvector.cpp)
+  uvector.cpp
+  wintz.cpp)
 disable_target_warnings(duckdb_icu_common1)
 set(ICU_LIBRARY_FILES
     ${ICU_LIBRARY_FILES} $<TARGET_OBJECTS:duckdb_icu_common>  $<TARGET_OBJECTS:duckdb_icu_common1>

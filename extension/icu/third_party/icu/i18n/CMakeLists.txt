@@ -29,7 +29,6 @@ add_library_unity(
   curramt.cpp
   currfmt.cpp
   currunit.cpp
-  dangical.cpp
   datefmt.cpp
   dcfmtsym.cpp
   decContext.cpp
@@ -129,10 +128,7 @@ add_library_unity(
   vzone.cpp
   zonemeta.cpp
   zrule.cpp
-  ztrans.cpp
-  windtfmt.cpp
-  winnmfmt.cpp
-  wintzimpl.cpp)
+  ztrans.cpp)
 disable_target_warnings(duckdb_icu_i18n)
 add_library(
   duckdb_icu_i18n1
@@ -145,6 +141,7 @@ add_library(
   collationroot.cpp
   coptccal.cpp
   currpinf.cpp
+  dangical.cpp
   dayperiodrules.cpp
   decimfmt.cpp
   decNumber.cpp
@@ -191,7 +188,10 @@ add_library(
   tzfmt.cpp
   ucal.cpp
   ucol_res.cpp
-  vtzone.cpp)
+  vtzone.cpp
+  windtfmt.cpp
+  winnmfmt.cpp
+  wintzimpl.cpp)
 disable_target_warnings(duckdb_icu_i18n1)
 set(ICU_LIBRARY_FILES
     ${ICU_LIBRARY_FILES} $<TARGET_OBJECTS:duckdb_icu_i18n> $<TARGET_OBJECTS:duckdb_icu_i18n1>
