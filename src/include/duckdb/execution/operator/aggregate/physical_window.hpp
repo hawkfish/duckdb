@@ -34,6 +34,8 @@ public:
 	bool is_order_dependent;
 	//! The partitions over which this is grouped (if any)
 	OperatorPartitionInfo partition_info;
+	//! Whether the operator produces partitioned dat
+	bool partitioned_output = false;
 
 public:
 	// Source interface

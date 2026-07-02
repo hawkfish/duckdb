@@ -64,13 +64,13 @@ public:
 	}
 
 	// The total number of tasks we will execute per thread
-	inline idx_t GetTaskCount() const {
-		return GetThreadCount() * (uint8_t(WindowGroupStage::DONE) - uint8_t(WindowGroupStage::SORT));
-	}
+	idx_t GetTaskCount() const;
+
 	// The total number of threads we will use
 	inline idx_t GetThreadCount() const {
 		return group_threads;
 	}
+
 	// Set up the task parameters
 	idx_t InitTasks(idx_t per_thread);
 
@@ -129,24 +129,7 @@ public:
 		return true;
 	}
 
-	bool TryNextTask(Task &task) {
-		if (next_task >= GetTaskCount()) {
-			return false;
-		}
-		const auto group_stage = GetStage();
-		const auto group_threads = GetThreadCount();
-		task.stage = WindowGroupStage(next_task / group_threads);
-		if (task.stage == group_stage) {
-			task.thread_idx = next_task % group_threads;
-			task.group_idx = group_idx;
-			task.begin_idx = task.thread_idx * per_thread;
-			task.end_idx = MinValue<idx_t>(task.begin_idx + per_thread, ChunkCount());
-			++next_task;
-			return true;
-		}
-
-		return false;
-	}
+	bool TryNextTask(Task &task);
 
 	//! The shared global state from sinking
 	WindowGlobalSinkState &gsink;
@@ -836,12 +819,50 @@ protected:
 	DataChunk eval_chunk;
 };
 
+// The total number of tasks we will execute per thread
+inline idx_t WindowHashGroup::GetTaskCount() const {
+	if (gsink.op.partitioned_output) {
+		return 1 + GetThreadCount() * (uint8_t(WindowGroupStage::GETDATA) - uint8_t(WindowGroupStage::SORT));
+	}
+
+	return GetThreadCount() * (uint8_t(WindowGroupStage::DONE) - uint8_t(WindowGroupStage::SORT));
+}
+
 idx_t WindowHashGroup::InitTasks(idx_t per_thread_p) {
 	per_thread = per_thread_p;
 	group_threads = BinValue(ChunkCount(), per_thread);
 	thread_states.resize(GetThreadCount());
 
 	return GetTaskCount();
+}
+
+bool WindowHashGroup::TryNextTask(Task &task) {
+	if (next_task >= GetTaskCount()) {
+		return false;
+	}
+	const auto group_stage = GetStage();
+	const auto group_threads = GetThreadCount();
+	task.stage = WindowGroupStage(next_task / group_threads);
+	if (task.stage != group_stage) {
+		return false;
+	}
+
+	//	If we are generating partitioned output,
+	// 	then only generate one GETDATA task
+	task.group_idx = group_idx;
+	if (gsink.op.partitioned_output && group_stage == WindowGroupStage::GETDATA) {
+		task.thread_idx = 0;
+		task.begin_idx = 0;
+		task.end_idx = ChunkCount();
+	} else {
+		task.thread_idx = next_task % group_threads;
+		task.begin_idx = task.thread_idx * per_thread;
+		task.end_idx = MinValue<idx_t>(task.begin_idx + per_thread, ChunkCount());
+	}
+
+	++next_task;
+
+	return true;
 }
 
 void WindowLocalSourceState::Sort(ExecutionContext &context, InterruptState &interrupt) {
