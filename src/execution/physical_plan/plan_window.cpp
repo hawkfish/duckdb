@@ -10,6 +10,23 @@
 
 namespace duckdb {
 
+static optional_ptr<PhysicalWindow> HasWindowInput(PhysicalOperator &child) {
+	reference<PhysicalOperator> child_ref(child);
+	for (;;) {
+		auto &child_op = child_ref.get();
+		switch (child_op.type) {
+		case PhysicalOperatorType::PROJECTION:
+		case PhysicalOperatorType::FILTER:
+			child_ref = child_op.children[0];
+			continue;
+		case PhysicalOperatorType::WINDOW:
+			return &child_op.Cast<PhysicalWindow>();
+		default:
+			return nullptr;
+		}
+	}
+}
+
 PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 	D_ASSERT(op.children.size() == 1);
 
@@ -22,6 +39,10 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 #endif
 
 	op.estimated_cardinality = op.EstimateCardinality(context);
+
+	//	Is the input another window?
+	//	If so, we may be able to reuse the partitioning and ordering.
+	auto input_window = HasWindowInput(plan);
 
 	// Slice types
 	auto types = op.types;
@@ -38,7 +59,7 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 	for (idx_t expr_idx = 0; expr_idx < op.expressions.size(); expr_idx++) {
 		auto &wexpr = op.expressions[expr_idx]->Cast<BoundWindowExpression>();
 		Columns partition_columns;
-		if (enable_optimizer && PhysicalStreamingWindow::IsStreamingFunction(context, wexpr)) {
+		if (enable_optimizer && PhysicalStreamingWindow::IsStreamingFunction(context, wexpr, input_window)) {
 			streaming_windows.push_back(expr_idx);
 		} else if (!wexpr.Partitions().empty() &&
 		           HasSingleValuePartitions(context, wexpr.Partitions(), plan, partition_columns)) {
@@ -171,6 +192,11 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 			auto &window = Make<PhysicalStreamingWindow>(types, std::move(select_list), op.estimated_cardinality);
 			window.children.push_back(plan);
 			plan = window;
+			//	If we are streaming from another window with compatible sorting,
+			//	tell it to partition its output.
+			if (input_window) {
+				input_window->partitioned_output = true;
+			}
 		} else {
 			const auto expr_idx = matching[0];
 			auto &partitions = partitioned_columns[expr_idx];

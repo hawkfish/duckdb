@@ -13,12 +13,15 @@
 
 namespace duckdb {
 
-//! PhysicalStreamingWindow implements streaming window functions (i.e. with an empty OVER clause)
+class PhysicalWindow;
+
+//! PhysicalStreamingWindow implements streaming window functions (i.e. those that can use the input ordering)
 class PhysicalStreamingWindow : public PhysicalOperator {
 public:
 	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::STREAMING_WINDOW;
 
-	static bool IsStreamingFunction(ClientContext &context, BoundWindowExpression &wexpr);
+	static bool IsStreamingFunction(ClientContext &context, BoundWindowExpression &wexpr,
+	                                optional_ptr<PhysicalWindow> source);
 
 public:
 	PhysicalStreamingWindow(PhysicalPlan &physical_plan, vector<LogicalType> types,
@@ -40,6 +43,8 @@ public:
 	bool RequiresFinalExecute() const final {
 		return true;
 	}
+
+	bool ParallelOperator() const override;
 
 	OrderPreservationType OperatorOrder() const override {
 		return OrderPreservationType::FIXED_ORDER;

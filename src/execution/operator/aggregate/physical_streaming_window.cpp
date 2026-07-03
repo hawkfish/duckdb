@@ -3,6 +3,7 @@
 #include "duckdb/common/vector/flat_vector.hpp"
 #include "duckdb/execution/aggregate_hashtable.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/execution/operator/aggregate/physical_window.hpp"
 #include "duckdb/function/aggregate_function.hpp"
 #include "duckdb/function/window_function.hpp"
 #include "duckdb/function/window/window_executor.hpp"
@@ -175,10 +176,23 @@ StreamingWindowGlobalState::StreamingWindowGlobalState(ClientContext &client) {
 	local_state = make_uniq<StreamingWindowState>(client);
 }
 
-bool PhysicalStreamingWindow::IsStreamingFunction(ClientContext &client, BoundWindowExpression &wexpr) {
-	if (!wexpr.Partitions().empty() || !wexpr.OrderBy().empty() || !wexpr.ArgOrders().empty() ||
+bool PhysicalStreamingWindow::IsStreamingFunction(ClientContext &client, BoundWindowExpression &wexpr,
+                                                  optional_ptr<PhysicalWindow> source) {
+	if (!wexpr.Partitions().empty() || !wexpr.ArgOrders().empty() ||
 	    wexpr.WindowExclude() != WindowExcludeMode::NO_OTHER) {
 		return false;
+	}
+	// Check to see if we could stream the result of the input
+	if (!wexpr.OrderBy().empty()) {
+		if (!source) {
+			return false;
+		}
+		const auto &wexpr_0 = source->select_list[source->order_idx]->Cast<BoundWindowExpression>();
+		const auto prefix = wexpr.GetSharedOrders(wexpr_0);
+		//	We need all the sort keys
+		if (prefix < wexpr.OrderBy().size()) {
+			return false;
+		}
 	}
 	if (wexpr.GetExpressionType() == ExpressionType::WINDOW_AGGREGATE) {
 		// Aggregates with destructors (e.g., quantile) are too slow to repeatedly update/finalize
@@ -302,6 +316,11 @@ void StreamingWindowState::AggregateState::Execute(ExecutionContext &context, Da
 		}
 		aggregate.GetStateFinalizeCallback()(statev, aggr_input_data, result, 1, i);
 	}
+}
+
+bool PhysicalStreamingWindow::ParallelOperator() const {
+	const auto &wexpr = select_list[0]->Cast<BoundWindowExpression>();
+	return !wexpr.Partitions().empty() || !wexpr.OrderBy().empty();
 }
 
 void PhysicalStreamingWindow::ExecuteFunctions(ExecutionContext &context, DataChunk &output, DataChunk &delayed,
