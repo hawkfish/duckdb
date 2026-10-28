@@ -652,3 +652,31 @@ SELECT * FROM (
 1	2
 2	1
 2	2
+
+# UCCs mean all the integer ranking functions are equivalent
+statement ok
+CREATE TABLE pk(id INTEGER PRIMARY KEY, payload VARCHAR, grp INTEGER);
+
+statement ok
+INSERT INTO pk VALUES (3, 'c', 1), (1, 'a', 2), (2, NULL, 1), (5, 'a', NULL), (4, 'b', 2);
+
+foreach ranker row_number rank dense_rank
+
+query II
+SELECT grp, payload
+FROM pk
+QUALIFY {ranker}() OVER (PARTITION BY grp, ORDER BY id) = 1;
+----
+NULL	a
+1	NULL
+2	a
+
+query II
+EXPLAIN
+SELECT grp, payload
+FROM pk
+QUALIFY {ranker}() OVER (PARTITION BY grp, ORDER BY id) = 1;
+----
+logical_opt	<!REGEX>:.*FILTER.*WINDOW.*
+
+endloop

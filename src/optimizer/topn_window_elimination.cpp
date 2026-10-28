@@ -20,6 +20,7 @@
 #include "duckdb/planner/operator/logical_unnest.hpp"
 #include "duckdb/planner/operator/logical_window.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/optimizer/apply_functional_dependencies.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -648,9 +649,6 @@ bool TopNWindowElimination::CanOptimize(LogicalOperator &op) {
 			}
 		}
 	}
-	if (window.expressions[0]->GetExpressionType() != ExpressionType::WINDOW_ROW_NUMBER) {
-		return false;
-	}
 	auto &window_expr = window.expressions[0]->Cast<BoundWindowExpression>();
 
 	if (!window_expr.ArgOrders().empty()) {
@@ -667,8 +665,33 @@ bool TopNWindowElimination::CanOptimize(LogicalOperator &op) {
 		return false;
 	}
 
-	// We have found a grouped top-n window construct!
-	return true;
+	switch (window.expressions[0]->GetExpressionType()) {
+	case ExpressionType::WINDOW_ROW_NUMBER:
+		return true;
+	case ExpressionType::WINDOW_RANK:
+	case ExpressionType::WINDOW_RANK_DENSE:
+		//	Check for a UCC sort
+		break;
+	default:
+		return false;
+	}
+
+	//	If the ORDER BY is UCC then rank, dense_rank and row_number are equivalent.
+	const auto &order_expr = *window_expr.OrderBy()[0].expression;
+	if (order_expr.GetExpressionType() == ExpressionType::BOUND_COLUMN_REF) {
+		const auto binding = order_expr.Cast<BoundColumnRefExpression>().Binding();
+		const auto uccs = ApplyFunctionalDependencies::GetUniqueColumnCombinations(op);
+		for (const auto &ucc : uccs) {
+			if (ucc.size() != 1) {
+				continue;
+			}
+			if (ucc.count(binding)) {
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 vector<unique_ptr<Expression>> TopNWindowElimination::GenerateAggregatePayload(const vector<ColumnBinding> &bindings,
