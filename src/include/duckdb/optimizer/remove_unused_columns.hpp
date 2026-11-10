@@ -129,8 +129,6 @@ protected:
 private:
 	//! The current mode of the pruner, enables/disables certain behaviors
 	BaseColumnPrunerMode mode = BaseColumnPrunerMode::DEFAULT;
-	//! True while visiting the child of OPERATOR_TRY or OPERATOR_HAS_ERROR. Do not push throwing CASTs (#25236).
-	bool inside_try = false;
 };
 
 //! The RemoveUnusedColumns optimizer traverses the logical operator tree and removes any columns that are not required
@@ -188,6 +186,15 @@ private:
 	        &callback);
 	unordered_map<TableIndex, MaterializedCTEInfo> &GetCTEMap();
 	optional_ptr<unordered_map<TableIndex, MaterializedCTEInfo>> TryGetCTEMap();
+};
+
+class ColumnReferenceExtractor : public BaseColumnPruner {
+public:
+	static column_binding_map_t<ReferencedColumn> GetReferences(unique_ptr<Expression> *expression) {
+		ColumnReferenceExtractor extractor;
+		extractor.VisitExpression(expression);
+		return extractor.column_references;
+	}
 };
 
 class CTERefPruner : public LogicalOperatorVisitor {

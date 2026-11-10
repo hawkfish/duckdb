@@ -20,6 +20,7 @@
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_unnest.hpp"
+#include "duckdb/common/type_visitor.hpp"
 #include "duckdb/planner/operator/logical_window.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
@@ -308,6 +309,7 @@ unique_ptr<LogicalOperator> TopNWindowElimination::OptimizeInternal(unique_ptr<L
 		}
 	}
 	const bool used_late_materialization = late_mat_lhs != nullptr;
+	any_late_materialization |= used_late_materialization;
 
 	op = CreateAggregateOperator(window, std::move(aggregate_payload), params);
 	op = TryCreateUnnestOperator(std::move(op), params);
@@ -542,16 +544,7 @@ TopNWindowElimination::CreateProjectionOperator(unique_ptr<LogicalOperator> op,
 	return unique_ptr<LogicalOperator>(std::move(logical_projection));
 }
 
-class ColumnReferenceExtractor : public BaseColumnPruner {
-public:
-	static column_binding_map_t<ReferencedColumn> GetReferences(unique_ptr<Expression> *expression) {
-		ColumnReferenceExtractor extractor;
-		extractor.VisitExpression(expression);
-		return extractor.column_references;
-	}
-};
-
-optional_idx TopNWindowElimination::CanOptimize(LogicalOperator &op, bool is_fusion) {
+optional_idx TopNWindowElimination::CanOptimize(LogicalOperator &op) {
 	const optional_idx cant_optimize;
 	if (op.type != LogicalOperatorType::LOGICAL_FILTER) {
 		return cant_optimize;
@@ -658,6 +651,10 @@ optional_idx TopNWindowElimination::CanOptimize(LogicalOperator &op, bool is_fus
 		return cant_optimize;
 	}
 	const auto &window = child.get().Cast<LogicalWindow>();
+	//	Give up if window fusion has already taking this.
+	if (window.partition_limit.IsValid()) {
+		return cant_optimize;
+	}
 	if (window.window_index != filter_col_idx) {
 		return cant_optimize;
 	}
@@ -682,15 +679,14 @@ optional_idx TopNWindowElimination::CanOptimize(LogicalOperator &op, bool is_fus
 	if (!window_expr.ArgOrders().empty()) {
 		return cant_optimize;
 	}
-	if (window_expr.OrderBy().size() == 1) {
-		if (window_expr.OrderBy()[0].type != OrderType::DESCENDING &&
-		    window_expr.OrderBy()[0].type != OrderType::ASCENDING) {
-			return cant_optimize;
-		}
-		if (window_expr.OrderBy()[0].null_order != OrderByNullType::NULLS_LAST) {
-			return cant_optimize;
-		}
-	} else if (!window_expr.OrderBy().empty() || !is_fusion) {
+	if (window_expr.OrderBy().size() != 1) {
+		return cant_optimize;
+	}
+	if (window_expr.OrderBy()[0].type != OrderType::DESCENDING &&
+	    window_expr.OrderBy()[0].type != OrderType::ASCENDING) {
+		return cant_optimize;
+	}
+	if (window_expr.OrderBy()[0].null_order != OrderByNullType::NULLS_LAST) {
 		return cant_optimize;
 	}
 
@@ -709,10 +705,15 @@ vector<unique_ptr<Expression>> TopNWindowElimination::GenerateAggregatePayload(c
 	const auto window_child_bindings = window.children[0]->GetColumnBindings();
 	auto &window_expr = window.expressions[0]->Cast<BoundWindowExpression>();
 
-	// Remember order of group columns to recreate that order in new bindings later
+	// Remember order of group columns to recreate that order in new bindings later.
+	// A FLOAT or DOUBLE group holds both 0.0 and -0.0, so such a column is carried in the payload instead.
 	column_binding_map_t<idx_t> group_bindings;
 	for (idx_t i = 0; i < window_expr.PartitionsMutable().size(); i++) {
 		auto &expr = window_expr.PartitionsMutable()[i];
+		const auto &type = expr->GetReturnType();
+		if (TypeVisitor::Contains(type, LogicalTypeId::FLOAT) || TypeVisitor::Contains(type, LogicalTypeId::DOUBLE)) {
+			continue;
+		}
 		auto column_references = ColumnReferenceExtractor::GetReferences(&expr);
 		group_bindings[column_references.begin()->first] = i;
 	}
