@@ -358,7 +358,8 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 
 		// Chain the new window operator on top of the plan
 		if (i >= special_count) {
-			auto &window = Make<PhysicalWindow>(types, std::move(select_list), op.estimated_cardinality);
+			auto &window =
+			    Make<PhysicalWindow>(types, std::move(select_list), op.estimated_cardinality, op.partition_limit);
 			window.children.push_back(plan);
 			plan = window;
 		} else if (has_streaming) {
@@ -369,8 +370,8 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 		} else {
 			const auto expr_idx = matching[0];
 			auto &partitions = partitioned_columns[expr_idx];
-			auto &window =
-			    Make<PhysicalWindow>(types, std::move(select_list), op.estimated_cardinality, std::move(partitions));
+			auto &window = Make<PhysicalWindow>(types, std::move(select_list), op.estimated_cardinality,
+			                                    std::move(partitions), op.partition_limit);
 			window.children.push_back(plan);
 			plan = window;
 		}

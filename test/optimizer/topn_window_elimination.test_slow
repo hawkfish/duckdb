@@ -78,7 +78,7 @@ FROM (
 ) AS src
 QUALIFY ROW_NUMBER() OVER (ORDER BY s DESC NULLS LAST) <= 2
 ----
-logical_opt	<REGEX>:.*(COMPARISON_JOIN.*Join Type: INNER.*rowid = rowid.*AGGREGATE|arg_max\(struct_pack\().*
+logical_opt	<REGEX>:.*WINDOW.*Limit.*
 
 # An unpartitioned top-1 window must not turn empty input into a NULL row
 statement ok
@@ -423,7 +423,7 @@ SELECT rand
 FROM ints
 QUALIFY 1 = row_number() OVER(ORDER BY rand);
 ----
-logical_opt	<!REGEX>:.*FILTER.*WINDOW.*
+logical_opt	<REGEX>:.*FILTER.*WINDOW.*Limit.*
 
 # Less than conditions should be optimized
 query I
@@ -439,7 +439,7 @@ SELECT rand
 FROM ints
 QUALIFY 2 > row_number() OVER(ORDER BY rand);
 ----
-logical_opt	<!REGEX>:.*FILTER.*WINDOW.*
+logical_opt	<REGEX>:.*FILTER.*WINDOW.*Limit.*
 
 # NOP comparisons should be optimised
 query II
@@ -448,7 +448,7 @@ SELECT rand
 FROM ints
 QUALIFY 0 = row_number() OVER(ORDER BY rand);
 ----
-logical_opt	<!REGEX>:.*FILTER.*WINDOW.*
+logical_opt	<REGEX>:.*EMPTY_RESULT.*
 
 query II
 EXPLAIN
@@ -456,7 +456,7 @@ SELECT rand
 FROM ints
 QUALIFY 1 > row_number() OVER(ORDER BY rand);
 ----
-logical_opt	<!REGEX>:.*FILTER.*WINDOW.*
+logical_opt	<REGEX>:.*EMPTY_RESULT.*
 
 query II
 EXPLAIN
@@ -464,7 +464,7 @@ SELECT rand
 FROM ints
 QUALIFY 0 >= row_number() OVER(ORDER BY rand);
 ----
-logical_opt	<!REGEX>:.*FILTER.*WINDOW.*
+logical_opt	<REGEX>:.*EMPTY_RESULT.*
 
 # taken from slt_good_12.test (this was previously causing issues in NightlyTests CI)
 statement ok
