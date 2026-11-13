@@ -41,6 +41,20 @@ TopNHeap::TopNHeap(ExecutionContext &context, const vector<LogicalType> &payload
     : TopNHeap(context.client, BufferAllocator::Get(context.client), payload_types, orders, limit, offset) {
 }
 
+bool TopNHeap::CanOptimize(idx_t limit, idx_t cardinality) {
+	// only check if we should switch to full sorting if we have estimated cardinality
+	auto constant_limit = static_cast<double>(limit);
+	auto child_card = static_cast<double>(cardinality);
+
+	// if the limit is > 0.7% of the child cardinality, sorting the whole table is faster
+	bool limit_is_large = constant_limit > 5000;
+	if (constant_limit > child_card * 0.007 && limit_is_large) {
+		return false;
+	}
+
+	return true;
+}
+
 void TopNHeap::AddSmallHeap(DataChunk &input, const Vector &sort_keys_vec) {
 	// insert the sort keys into the priority queue
 	constexpr idx_t BASE_INDEX = NumericLimits<uint32_t>::Maximum();

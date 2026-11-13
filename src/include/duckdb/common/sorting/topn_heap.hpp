@@ -79,6 +79,8 @@ struct TopNBoundaryValue {
 
 class TopNHeap {
 public:
+	static bool CanOptimize(idx_t limit, idx_t cardinality);
+
 	TopNHeap(ClientContext &context, const vector<LogicalType> &payload_types, const vector<BoundOrderByNode> &orders,
 	         idx_t limit, idx_t offset);
 	TopNHeap(ExecutionContext &context, const vector<LogicalType> &payload_types,

@@ -16,6 +16,8 @@ class TopNSort : public SortStrategy {
 public:
 	using Orders = vector<BoundOrderByNode>;
 
+	static bool CanOptimize(optional_idx limit, idx_t cardinality);
+
 	TopNSort(ClientContext &client, const vector<BoundOrderByNode> &order_bys, const Types &payload_types,
 	         optional_idx partition_limit);
 

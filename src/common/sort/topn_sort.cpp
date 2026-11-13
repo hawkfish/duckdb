@@ -190,6 +190,14 @@ TopNSortGlobalSourceState::TopNSortGlobalSourceState(ClientContext &client, TopN
 //===--------------------------------------------------------------------===//
 // TopNSort
 //===--------------------------------------------------------------------===//
+bool TopNSort::CanOptimize(optional_idx limit, idx_t cardinality) {
+	if (!limit.IsValid() || !cardinality) {
+		return false;
+	}
+
+	return TopNHeap::CanOptimize(limit.GetIndex(), cardinality);
+}
+
 TopNSort::TopNSort(ClientContext &client, const vector<BoundOrderByNode> &order_bys, const Types &input_types,
                    optional_idx partition_limit)
     : SortStrategy(input_types, partition_limit) {
@@ -243,7 +251,6 @@ SourceResultType TopNSort::MaterializeColumnData(ExecutionContext &execution, id
 	//	Build a range into a PartitionedColumnData
 	idx_t pos = DConstants::INVALID_INDEX;
 	idx_t end = DConstants::INVALID_INDEX;
-	idx_t batch_index = DConstants::INVALID_INDEX;
 	optional_ptr<ColumnDataCollection> batch_data;
 
 	DataChunk chunk;
@@ -256,7 +263,6 @@ SourceResultType TopNSort::MaterializeColumnData(ExecutionContext &execution, id
 			pos = gsource.scan.pos;
 			gsource.scan.pos += TopNSortGlobalSourceState::TUPLES_PER_BATCH;
 			end = gsource.scan.pos;
-			batch_index = gsource.batches.size();
 			auto batch = make_uniq<ColumnDataCollection>(execution.client, payload_types);
 			batch->InitializeAppend(append);
 			batch_data = batch.get();

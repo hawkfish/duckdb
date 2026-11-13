@@ -45,10 +45,10 @@ unique_ptr<SortStrategy> SortStrategy::Factory(ClientContext &client,
 		return make_uniq<HashedSort>(client, partition_bys, order_bys, payload_types, partitions_stats,
 		                             estimated_cardinality, require_payload);
 	} else if (!order_bys.empty()) {
-		if (partition_limit.IsValid()) {
+		if (TopNSort::CanOptimize(partition_limit, estimated_cardinality)) {
 			return make_uniq<TopNSort>(client, order_bys, payload_types, partition_limit);
 		}
-		return make_uniq<FullSort>(client, order_bys, payload_types, require_payload);
+		return make_uniq<FullSort>(client, order_bys, payload_types, require_payload, partition_limit);
 	} else {
 		return make_uniq<NaturalSort>(payload_types);
 	}
